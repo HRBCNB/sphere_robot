@@ -8,7 +8,9 @@ AStar::~AStar()
     for (int i = 0; i < POOL_SIZE_(0); i++)
         for (int j = 0; j < POOL_SIZE_(1); j++)
             for (int k = 0; k < POOL_SIZE_(2); k++)
+            {
                 delete GridNodeMap_[i][j][k];
+            }
 }
 
 void AStar::initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size)
@@ -16,10 +18,10 @@ void AStar::initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size)
     POOL_SIZE_ = pool_size;
     CENTER_IDX_ = pool_size / 2;
 
-    GridNodeMap_ = new GridNodePtr **[POOL_SIZE_(0)];
+    GridNodeMap_ = new GridNodePtr**[POOL_SIZE_(0)];
     for (int i = 0; i < POOL_SIZE_(0); i++)
     {
-        GridNodeMap_[i] = new GridNodePtr *[POOL_SIZE_(1)];
+        GridNodeMap_[i] = new GridNodePtr*[POOL_SIZE_(1)];
         for (int j = 0; j < POOL_SIZE_(1); j++)
         {
             GridNodeMap_[i][j] = new GridNodePtr[POOL_SIZE_(2)];
@@ -88,30 +90,28 @@ vector<GridNodePtr> AStar::retrievePath(GridNodePtr current)
     return path;
 }
 
-bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d start_pt, Vector3d end_pt, Vector3i &start_idx, Vector3i &end_idx)
+bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d start_pt, Vector3d end_pt, Vector3i& start_idx,
+                                                  Vector3i& end_idx)
 {
-    if (!Coord2Index(start_pt, start_idx) || !Coord2Index(end_pt, end_idx))
-        return false;
+    if (!Coord2Index(start_pt, start_idx) || !Coord2Index(end_pt, end_idx)) return false;
 
     if (checkOccupancy(Index2Coord(start_idx)))
     {
-        //ROS_WARN("Start point is insdide an obstacle.");
+        // ROS_WARN("Start point is insdide an obstacle.");
         do
         {
             start_pt = (start_pt - end_pt).normalized() * step_size_ + start_pt;
-            if (!Coord2Index(start_pt, start_idx))
-                return false;
+            if (!Coord2Index(start_pt, start_idx)) return false;
         } while (checkOccupancy(Index2Coord(start_idx)));
     }
 
     if (checkOccupancy(Index2Coord(end_idx)))
     {
-        //ROS_WARN("End point is insdide an obstacle.");
+        // ROS_WARN("End point is insdide an obstacle.");
         do
         {
             end_pt = (end_pt - start_pt).normalized() * step_size_ + end_pt;
-            if (!Coord2Index(end_pt, end_idx))
-                return false;
+            if (!Coord2Index(end_pt, end_idx)) return false;
         } while (checkOccupancy(Index2Coord(end_idx)));
     }
 
@@ -120,6 +120,7 @@ bool AStar::ConvertToIndexAndAdjustStartEndPoints(Vector3d start_pt, Vector3d en
 
 bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_pt)
 {
+    // TODO：更改A*算法的寻路逻辑 roll模式不考虑Z轴，只有在前方有障碍物的时候再考虑Jump模式
     ros::Time time_1 = ros::Time::now();
     ++rounds_;
 
@@ -150,9 +151,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     startPtr->rounds = rounds_;
     startPtr->gScore = 0;
     startPtr->fScore = getHeu(startPtr, endPtr);
-    startPtr->state = GridNode::OPENSET; //put start node in open set
+    startPtr->state = GridNode::OPENSET;  // put start node in open set
     startPtr->cameFrom = NULL;
-    openSet_.push(startPtr); //put start in open set
+    openSet_.push(startPtr);  // put start in open set
 
     endPtr->index = end_idx;
 
@@ -168,7 +169,8 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         // if ( num_iter < 10000 )
         //     cout << "current=" << current->index.transpose() << endl;
 
-        if (current->index(0) == endPtr->index(0) && current->index(1) == endPtr->index(1) && current->index(2) == endPtr->index(2))
+        if (current->index(0) == endPtr->index(0) && current->index(1) == endPtr->index(1) &&
+            current->index(2) == endPtr->index(2))
         {
             // ros::Time time_2 = ros::Time::now();
             // printf("\033[34mA star iter:%d, time:%.3f\033[0m\n",num_iter, (time_2 - time_1).toSec()*1000);
@@ -177,21 +179,22 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
             gridPath_ = retrievePath(current);
             return true;
         }
-        current->state = GridNode::CLOSEDSET; //move current node from open set to closed set.
+        current->state = GridNode::CLOSEDSET;  // move current node from open set to closed set.
 
         for (int dx = -1; dx <= 1; dx++)
             for (int dy = -1; dy <= 1; dy++)
                 for (int dz = -1; dz <= 1; dz++)
                 {
-                    if (dx == 0 && dy == 0 && dz == 0)
-                        continue;
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
 
                     Vector3i neighborIdx;
                     neighborIdx(0) = (current->index)(0) + dx;
                     neighborIdx(1) = (current->index)(1) + dy;
                     neighborIdx(2) = (current->index)(2) + dz;
 
-                    if (neighborIdx(0) < 1 || neighborIdx(0) >= POOL_SIZE_(0) - 1 || neighborIdx(1) < 1 || neighborIdx(1) >= POOL_SIZE_(1) - 1 || neighborIdx(2) < 1 || neighborIdx(2) >= POOL_SIZE_(2) - 1)
+                    if (neighborIdx(0) < 1 || neighborIdx(0) >= POOL_SIZE_(0) - 1 || neighborIdx(1) < 1 ||
+                        neighborIdx(1) >= POOL_SIZE_(1) - 1 || neighborIdx(2) < 1 ||
+                        neighborIdx(2) >= POOL_SIZE_(2) - 1)
                     {
                         continue;
                     }
@@ -203,7 +206,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
 
                     if (flag_explored && neighborPtr->state == GridNode::CLOSEDSET)
                     {
-                        continue; //in closed set.
+                        continue;  // in closed set.
                     }
 
                     neighborPtr->rounds = rounds_;
@@ -218,15 +221,15 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
 
                     if (!flag_explored)
                     {
-                        //discover a new node
+                        // discover a new node
                         neighborPtr->state = GridNode::OPENSET;
                         neighborPtr->cameFrom = current;
                         neighborPtr->gScore = tentative_gScore;
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
-                        openSet_.push(neighborPtr); //put neighbor in open set and record it.
+                        openSet_.push(neighborPtr);  // put neighbor in open set and record it.
                     }
                     else if (tentative_gScore < neighborPtr->gScore)
-                    { //in open set and need update
+                    {  // in open set and need update
                         neighborPtr->cameFrom = current;
                         neighborPtr->gScore = tentative_gScore;
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
@@ -252,8 +255,7 @@ vector<Vector3d> AStar::getPath()
 {
     vector<Vector3d> path;
 
-    for (auto ptr : gridPath_)
-        path.push_back(Index2Coord(ptr->index));
+    for (auto ptr : gridPath_) path.push_back(Index2Coord(ptr->index));
 
     reverse(path.begin(), path.end());
     return path;
