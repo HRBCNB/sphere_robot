@@ -86,9 +86,9 @@ class AStar
     const double tie_breaker_ = 1.0 + 1.0 / 10000;
 
     // Multi-modal planning parameters
-    double max_jump_h_ = 0.5;    // Maximum jump height (m)
-    double max_jump_d_ = 1.5;    // Maximum jump distance (m)
-    double jump_penalty_ = 5.0;  // Extra cost for jumping
+    double max_jump_h_;    // Maximum jump height (m)
+    double max_jump_d_;    // Maximum jump distance (m)
+    double jump_penalty_;  // Extra cost for jumping
 
     std::vector<GridNodePtr> gridPath_;
 
@@ -105,13 +105,7 @@ class AStar
 
     void initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size);
 
-    void setJumpParams(double max_jump_h, double max_jump_d, double jump_penalty)
-    {
-        max_jump_h_ = max_jump_h;
-        max_jump_d_ = max_jump_d;
-        jump_penalty_ = jump_penalty;
-    }
-
+    void setJumpParams(ros::NodeHandle& nh);
     bool AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt);
 
     std::vector<Eigen::Vector3d> getPath();

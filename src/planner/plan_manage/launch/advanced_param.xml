@@ -107,6 +107,11 @@
     <param name="grid_map/pose_type"     value="2"/>  
     <param name="grid_map/frame_id"      value="world"/>
 
+    <!-- 机器人跳跃参数 -->
+    <param name="planner/max_jump_h" value="0.5" type="double"/>
+    <param name="planner/max_jump_d" value="1.5" type="double"/>
+    <param name="planner/jump_penalty" value="5.0" type="double"/>
+
   <!-- planner manager -->
     <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>
     <param name="manager/max_acc" value="$(arg max_acc)" type="double"/>

@@ -37,7 +37,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     bspline_optimizer_rebound_->setEnvironment(grid_map_);
     bspline_optimizer_rebound_->a_star_.reset(new AStar);
     bspline_optimizer_rebound_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
-    bspline_optimizer_rebound_->a_star_->setJumpParams(max_jump_h_, max_jump_d_, jump_penalty_);
+    bspline_optimizer_rebound_->a_star_->setJumpParams(nh);
 
     visualization_ = vis;
 }

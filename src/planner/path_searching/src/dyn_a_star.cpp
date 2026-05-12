@@ -35,6 +35,13 @@ void AStar::initGridMap(GridMap::Ptr occ_map, const Eigen::Vector3i pool_size)
     grid_map_ = occ_map;
 }
 
+void AStar::setJumpParams(ros::NodeHandle& nh)
+{
+    nh.param("a_star/max_jump_h", max_jump_h_, 0.6);
+    nh.param("a_star/max_jump_d", max_jump_d_, 1.5);
+    nh.param("a_star/jump_penalty", jump_penalty_, 5.0);
+}
+
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
 {
     double dx = abs(node1->index(0) - node2->index(0));
@@ -228,7 +235,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                         // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
                         {
                             // 落点
-                            Vector3i landing_idx = Coord2Index(landing_pos);
+                            Vector3i landing_idx;
+                            if (!Coord2Index(landing_pos, landing_idx))
+                            {
+                                // 落点idx转换失败
+                                continue;
+                            }
                             GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
 
                             // 计算跳跃代价：物理距离 + 创新点惩罚
@@ -250,9 +262,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                                 jumpNodePtr->fScore = tentative_gScore + getHeu(jumpNodePtr, endPtr);
 
                                 // 标记为 JUMP 模式，用于 retrievePath 生成拱形轨迹
-                                jumpNodePtr->mode = 2;  //  2 代表 JUMP, 1 代表 ROLL
-
-                                openSet_.push(jumpNodePtr);
+                                jumpNodePtr->mode = GridNode::JUMP;
                             }
                             // 找到第一个最优落脚点后，跳出当前方向的 dist 循环
                             break;
