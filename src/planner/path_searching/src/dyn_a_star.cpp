@@ -183,43 +183,91 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
 
         for (int dx = -1; dx <= 1; dx++)
             for (int dy = -1; dy <= 1; dy++)
-                for (int dz = -1; dz <= 1; dz++)
+            // 滚动模式不考虑Z轴的变化
+            // for (int dz = -1; dz <= 1; dz++)
+            {
+                int dz = 0;
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                // 拓展邻居节点的索引
+                Vector3i neighborIdx;
+                neighborIdx(0) = (current->index)(0) + dx;
+                neighborIdx(1) = (current->index)(1) + dy;
+                neighborIdx(2) = (current->index)(2) + dz;
+                // 越界处理
+                if (neighborIdx(0) < 1 || neighborIdx(0) >= POOL_SIZE_(0) - 1 || neighborIdx(1) < 1 ||
+                    neighborIdx(1) >= POOL_SIZE_(1) - 1 || neighborIdx(2) < 1 || neighborIdx(2) >= POOL_SIZE_(2) - 1)
                 {
-                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    continue;
+                }
+                // 获取邻居节点指针
+                neighborPtr = GridNodeMap_[neighborIdx(0)][neighborIdx(1)][neighborIdx(2)];
+                neighborPtr->index = neighborIdx;
+                // 判断邻居节点是否已经被探索过，如果已经被探索过且在闭集里，则跳过
+                bool flag_explored = neighborPtr->rounds == rounds_;
 
-                    Vector3i neighborIdx;
-                    neighborIdx(0) = (current->index)(0) + dx;
-                    neighborIdx(1) = (current->index)(1) + dy;
-                    neighborIdx(2) = (current->index)(2) + dz;
+                if (flag_explored && neighborPtr->state == GridNode::CLOSEDSET)
+                {
+                    continue;  // in closed set.
+                }
 
-                    if (neighborIdx(0) < 1 || neighborIdx(0) >= POOL_SIZE_(0) - 1 || neighborIdx(1) < 1 ||
-                        neighborIdx(1) >= POOL_SIZE_(1) - 1 || neighborIdx(2) < 1 ||
-                        neighborIdx(2) >= POOL_SIZE_(2) - 1)
+                neighborPtr->rounds = rounds_;
+
+                // 检测到邻居节点在障碍物中
+                if (checkOccupancy(Index2Coord(neighborPtr->index)))
+                {
+                    // 定义跳跃搜索方向
+                    Vector3d jump_dir = Vector3d(double(dx), double(dy), 0.0).normalized();
+                    Vector3d start_pos = Index2Coord(current->index);
+
+                    // 在最大跳跃跨度内搜索落脚点
+                    for (double dist = 0.5; dist <= max_jump_d_; dist += step_size_)
                     {
-                        continue;
+                        Vector3d landing_pos = start_pos + jump_dir * dist;
+
+                        if (isJumpFeasible(
+                                start_pos,
+                                landing_pos))  // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
+                        {
+                            Vector3i landing_idx = Coord2Index(landing_pos);
+                            GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
+
+                            // 计算跳跃代价：物理距离 + 创新点惩罚
+                            double jump_cost = dist + jump_penalty_;
+                            double tentative_gScore = current->gScore + jump_cost;
+
+                            bool jump_explored = (jumpNodePtr->rounds == rounds_);
+
+                            // 检查该节点是否已在 ClosedSet 中
+                            if (jump_explored && jumpNodePtr->state == GridNode::CLOSEDSET) continue;
+
+                            // 更新或发现 Jump 节点
+                            if (!jump_explored || tentative_gScore < jumpNodePtr->gScore)
+                            {
+                                jumpNodePtr->rounds = rounds_;
+                                jumpNodePtr->state = GridNode::OPENSET;
+                                jumpNodePtr->cameFrom = current;
+                                jumpNodePtr->gScore = tentative_gScore;
+                                jumpNodePtr->fScore = tentative_gScore + getHeu(jumpNodePtr, endPtr);
+
+                                // 标记为 JUMP 模式，用于 retrievePath 生成拱形轨迹
+                                jumpNodePtr->mode = 2;  //  2 代表 JUMP, 1 代表 ROLL
+
+                                openSet_.push(jumpNodePtr);
+                            }
+                            // 找到第一个最优落脚点后，跳出当前方向的 dist 循环
+                            break;
+                        }
                     }
-
-                    neighborPtr = GridNodeMap_[neighborIdx(0)][neighborIdx(1)][neighborIdx(2)];
-                    neighborPtr->index = neighborIdx;
-
-                    bool flag_explored = neighborPtr->rounds == rounds_;
-
-                    if (flag_explored && neighborPtr->state == GridNode::CLOSEDSET)
-                    {
-                        continue;  // in closed set.
-                    }
-
-                    neighborPtr->rounds = rounds_;
-
-                    if (checkOccupancy(Index2Coord(neighborPtr->index)))
-                    {
-                        continue;
-                    }
-
+                    // 处理完跳跃尝试后，跳过当前这个被占用的 ROLL 邻居
+                    continue;
+                }
+                else
+                {
+                    // 代价
                     double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
                     tentative_gScore = current->gScore + static_cost;
 
-                    if (!flag_explored)
+                    if (!flag_explored)  // 没有拓展过，加入open set
                     {
                         // discover a new node
                         neighborPtr->state = GridNode::OPENSET;
@@ -228,13 +276,14 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
                         openSet_.push(neighborPtr);  // put neighbor in open set and record it.
                     }
-                    else if (tentative_gScore < neighborPtr->gScore)
-                    {  // in open set and need update
+                    else if (tentative_gScore < neighborPtr->gScore)  // 已经拓展过，更新
+                    {                                                 // in open set and need update
                         neighborPtr->cameFrom = current;
                         neighborPtr->gScore = tentative_gScore;
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
                     }
                 }
+            }  // end of for loop of neighbor expansion
         ros::Time time_2 = ros::Time::now();
         if ((time_2 - time_1).toSec() > 0.2)
         {
@@ -249,7 +298,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         ROS_WARN("Time consume in A star path finding is %.3fs, iter=%d", (time_2 - time_1).toSec(), num_iter);
 
     return false;
-}
+}  // end AstarSearch
 
 vector<Vector3d> AStar::getPath()
 {

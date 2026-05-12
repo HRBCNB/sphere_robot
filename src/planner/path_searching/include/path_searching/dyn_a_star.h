@@ -33,6 +33,10 @@ struct GridNode
     {
         UNDEFINED
     };
+    enum enum_mode mode
+    {
+        ROLL
+    };
     Eigen::Vector3i index;
 
     double gScore{inf}, fScore{inf};
@@ -63,6 +67,7 @@ class AStar
     bool ConvertToIndexAndAdjustStartEndPoints(const Eigen::Vector3d start_pt, const Eigen::Vector3d end_pt,
                                                Eigen::Vector3i& start_idx, Eigen::Vector3i& end_idx);
 
+    bool isJumpFeasible(const Eigen::Vector3d& start_pos, const Eigen::Vector3d& landing_pos);
     inline Eigen::Vector3d Index2Coord(const Eigen::Vector3i& index) const;
     inline bool Coord2Index(const Eigen::Vector3d& pt, Eigen::Vector3i& idx) const;
 
