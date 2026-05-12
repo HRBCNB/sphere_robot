@@ -224,10 +224,10 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                     {
                         Vector3d landing_pos = start_pos + jump_dir * dist;
 
-                        if (isJumpFeasible(
-                                start_pos,
-                                landing_pos))  // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
+                        if (isJumpFeasible(start_pos, landing_pos))
+                        // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
                         {
+                            // 落点
                             Vector3i landing_idx = Coord2Index(landing_pos);
                             GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
 
@@ -308,4 +308,37 @@ vector<Vector3d> AStar::getPath()
 
     reverse(path.begin(), path.end());
     return path;
+}
+
+bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_pos)
+{
+    if (checkOccupancy(landing_pos))
+    {
+        return false;
+    }
+
+    double dist = (landing_pos - start_pos).norm();
+    int num_checks = static_cast<int>(dist / (step_size_ / 2.0));  // 检验点数量
+
+    // 3. 沿途高度校验
+    for (int i = 1; i < num_checks; i++)
+    {
+        Vector3d check_pos = start_pos + (landing_pos - start_pos) * (static_cast<double>(i) / num_checks);
+
+        // 如果这个位置有障碍物
+        if (checkOccupancy(check_pos))
+        {
+            // 获取该位置障碍物的最高点高度
+            // 假设你使用的是 EGO-Planner 常见的 grid_map 接口
+            double obs_h = grid_map_->getObstacleHeight(check_pos);
+
+            // 物理约束判定：障碍物相对起跳点的高度是否超过了最大跳跃高度 (0.5m)
+            if ((obs_h - start_pos.z()) > max_jump_h_)
+            {
+                return false;  // 障碍物太高了，跳不过去
+            }
+        }
+    }
+
+    return true;  // 即使有障碍物，但只要没超过 max_jump_h_，就判定为可行
 }
