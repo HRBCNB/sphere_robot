@@ -13,6 +13,20 @@ constexpr double inf = 1 >> 20;
 struct GridNode;
 typedef GridNode* GridNodePtr;
 
+namespace ego_planner
+{
+enum TRAJ_MODE
+{
+    ROLL = 1,
+    JUMP = 2
+};
+};
+
+struct PathNode
+{
+    Eigen::Vector3d pos;
+    TRAJ_MODE mode;
+};
 struct GridNode
 {
     enum enum_state
@@ -108,7 +122,7 @@ class AStar
     void setJumpParams(ros::NodeHandle& nh);
     bool AstarSearch(const double step_size, Eigen::Vector3d start_pt, Eigen::Vector3d end_pt);
 
-    std::vector<Eigen::Vector3d> getPath();
+    std::vector<PathNode> getPath();
 };
 
 inline double AStar::getHeu(GridNodePtr node1, GridNodePtr node2)

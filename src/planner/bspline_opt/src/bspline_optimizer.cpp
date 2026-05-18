@@ -38,9 +38,21 @@ void BsplineOptimizer::setBsplineInterval(const double& ts)
 /* This function is very similar to check_collision_and_rebound().
  * It was written separately, just because I did it once and it has been running stably since March 2020.
  * But I will merge then someday.*/
-std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_points,
-                                                                              bool flag_first_init /*= true*/)
+
+/**
+ * @brief 先把初始控制点保存到内部结构里
+          在控制点连成的轨迹上检测哪里进入了障碍物区域
+          把碰撞段切出来，记录成多个 segment
+          对每个碰撞段跑 A* 搜索，得到一条局部可行路径
+          再根据这些碰撞段和 A* 路径，计算每个控制点可以往哪个方向推、往哪里推，也就是记录 base_point 和 direction
+          这类优化所需信息
+ * @param init_points 输入的初始轨迹点，3 x N矩阵，每列是一个点
+ * @param flag_first_init 是否为首次初始化
+ * @return 控制点列表
+ */
+std::vector<PathNode> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_points, bool flag_first_init /*= true*/)
 {
+    // 初始化内部控制点容器
     if (flag_first_init)
     {
         cps_.clearance = dist0_;
@@ -49,6 +61,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
     }
 
     /*** Segment the initial trajectory according to obstacles ***/
+    // 按障碍物把轨迹分段（找进障/出障区间）
     constexpr int ENOUGH_INTERVAL = 2;
     double step_size = grid_map_->getResolution() /
                        ((init_points.col(0) - init_points.rightCols(1)).norm() / (init_points.cols() - 1)) / 2;
@@ -105,9 +118,9 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
             }
         }
     }
-
+    // 对每个碰撞段跑 A*
     /*** a star search ***/
-    vector<vector<Eigen::Vector3d>> a_star_pathes;
+    vector<vector<PathNode>> a_star_pathes;
     for (size_t i = 0; i < segment_ids.size(); ++i)
     {
         // cout << "in=" << in.transpose() << " out=" << out.transpose() << endl;
@@ -124,6 +137,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
     }
 
     /*** calculate bounds ***/
+    // 计算每段可扩展边界 bounds
     int id_low_bound, id_up_bound;
     vector<std::pair<int, int>> bounds(segment_ids.size());
     for (size_t i = 0; i < segment_ids.size(); i++)
@@ -165,6 +179,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
     // }
 
     /*** Adjust segment length ***/
+    // 调整碰撞段长度
     vector<std::pair<int, int>> final_segment_ids(segment_ids.size());
     constexpr double MINIMUM_PERCENT =
         0.0;  // Each segment is guaranteed to have sufficient points to generate sufficient thrust
@@ -197,12 +212,17 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
     }
 
     /*** Assign data to each segment ***/
+    // 给每段分配避障参考数据（主流程）
     for (size_t i = 0; i < segment_ids.size(); i++)
     {
-        // step 1
+        // step 1 先把该段相关控制点的 flag_temp 清空；
         for (int j = final_segment_ids[i].first; j <= final_segment_ids[i].second; ++j) cps_.flag_temp[j] = false;
 
-        // step 2
+        /*
+        step 2：在段内每个控制点 j 上，找控制点局部法向（j+1 与 j-1 形成的方向）与 A* 路径的交点 intersection_point；
+        找到交点后，从交点往控制点方向按地图分辨率回退，找到靠近障碍边界的基准点，记录到 cps_.base_point[j]，方向记录到
+        cps_.direction[j]。 目的：为每个控制点构造“从哪里、往哪个方向推开”的几何信息。
+        */
         int got_intersection_id = -1;
         for (int j = segment_ids[i].first + 1; j < segment_ids[i].second; ++j)
         {
@@ -210,7 +230,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
             int Astar_id = a_star_pathes[i].size() / 2,
                 last_Astar_id;  // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs
                                 // more computation
-            double val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law), last_val = val;
+            double val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law), last_val = val;
             while (Astar_id >= 0 && Astar_id < (int)a_star_pathes[i].size())
             {
                 last_Astar_id = Astar_id;
@@ -220,16 +240,16 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
                 else
                     ++Astar_id;
 
-                val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law);
+                val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law);
 
                 if (val * last_val <= 0 && (abs(val) > 0 || abs(last_val) > 0))  // val = last_val = 0.0 is not allowed
                 {
-                    intersection_point =
-                        a_star_pathes[i][Astar_id] +
-                        ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                         (ctrl_pts_law.dot(cps_.points.col(j) - a_star_pathes[i][Astar_id]) /
-                          ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]))  // = t
-                        );
+                    intersection_point = a_star_pathes[i][Astar_id].pos +
+                                         ((a_star_pathes[i][Astar_id].pos - a_star_pathes[i][last_Astar_id].pos) *
+                                          (ctrl_pts_law.dot(cps_.points.col(j) - a_star_pathes[i][Astar_id].pos) /
+                                           ctrl_pts_law.dot(a_star_pathes[i][Astar_id].pos -
+                                                            a_star_pathes[i][last_Astar_id].pos))  // = t
+                                         );
 
                     // cout << "i=" << i << " j=" << j << " Astar_id=" << Astar_id << " last_Astar_id=" << last_Astar_id
                     // << " intersection_point = " << intersection_point.transpose() << endl;
@@ -265,6 +285,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
 
         /* Corner case: the segment length is too short. Here the control points may outside the A* path, leading to
          * opposite gradient direction. So I have to take special care of it */
+        // 特殊短段处理（段长度只有 1）
         if (segment_ids[i].second - segment_ids[i].first == 1)
         {
             Eigen::Vector3d ctrl_pts_law(cps_.points.col(segment_ids[i].second) -
@@ -275,7 +296,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
             int Astar_id = a_star_pathes[i].size() / 2,
                 last_Astar_id;  // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs
                                 // more computation
-            double val = (a_star_pathes[i][Astar_id] - middle_point).dot(ctrl_pts_law), last_val = val;
+            double val = (a_star_pathes[i][Astar_id].pos - middle_point).dot(ctrl_pts_law), last_val = val;
             while (Astar_id >= 0 && Astar_id < (int)a_star_pathes[i].size())
             {
                 last_Astar_id = Astar_id;
@@ -285,16 +306,16 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
                 else
                     ++Astar_id;
 
-                val = (a_star_pathes[i][Astar_id] - middle_point).dot(ctrl_pts_law);
+                val = (a_star_pathes[i][Astar_id].pos - middle_point).dot(ctrl_pts_law);
 
                 if (val * last_val <= 0 && (abs(val) > 0 || abs(last_val) > 0))  // val = last_val = 0.0 is not allowed
                 {
-                    intersection_point =
-                        a_star_pathes[i][Astar_id] +
-                        ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                         (ctrl_pts_law.dot(middle_point - a_star_pathes[i][Astar_id]) /
-                          ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]))  // = t
-                        );
+                    intersection_point = a_star_pathes[i][Astar_id].pos +
+                                         ((a_star_pathes[i][Astar_id].pos - a_star_pathes[i][last_Astar_id].pos) *
+                                          (ctrl_pts_law.dot(middle_point - a_star_pathes[i][Astar_id].pos) /
+                                           ctrl_pts_law.dot(a_star_pathes[i][Astar_id].pos -
+                                                            a_star_pathes[i][last_Astar_id].pos))  // = t
+                                         );
 
                     if ((intersection_point - middle_point).norm() > 0.01)  // 1cm.
                     {
@@ -314,6 +335,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
         if (got_intersection_id >= 0)
         {
             for (int j = got_intersection_id + 1; j <= final_segment_ids[i].second; ++j)
+                // 补齐没有直接求到交点的控制点
                 if (!cps_.flag_temp[j])
                 {
                     cps_.base_point[j].push_back(cps_.base_point[j - 1].back());
@@ -333,7 +355,7 @@ std::vector<std::vector<Eigen::Vector3d>> BsplineOptimizer::initControlPoints(Ei
             // ROS_ERROR("Failed to generate direction! segment_id=%d", i);
         }
     }
-
+    // 返回每段对应的 A* 路径集合 a_star_pathes
     return a_star_pathes;
 }
 
@@ -439,12 +461,19 @@ void BsplineOptimizer::calcFitnessCost(const Eigen::MatrixXd& q, double& cost, E
     }
 }
 
-void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient,
-                                          bool falg_use_jerk /* = true*/)
+/**
+ * @brief 计算平滑性代价和梯度·
+ * @param q 控制点矩阵，3 x N
+ * @param 平滑性代价
+ * @param 平滑性代价梯度
+ * @param falg_use_jerk 是否使用jerk （true：minijerk；false：miniacc）默认使用jerk。
+ */
+void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, int traj_mode, double& cost,
+                                          Eigen::MatrixXd& gradient, bool falg_use_jerk /* = true*/)
 {
     cost = 0.0;
 
-    if (falg_use_jerk)
+    if (falg_use_jerk)  // minijerk
     {
         Eigen::Vector3d jerk, temp_j;
 
@@ -452,16 +481,21 @@ void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, double& cost
         {
             /* evaluate jerk */
             jerk = q.col(i + 3) - 3 * q.col(i + 2) + 3 * q.col(i + 1) - q.col(i);
+            if (traj_mode == ROLL)
+            {
+                jerk(2) = 0.0;  // 不考虑z轴
+            }
             cost += jerk.squaredNorm();
+            // cost对jerk的导数
             temp_j = 2.0 * jerk;
-            /* jerk gradient */
+            /* jerk 对第i个位置的梯度gradient */
             gradient.col(i + 0) += -temp_j;
             gradient.col(i + 1) += 3.0 * temp_j;
             gradient.col(i + 2) += -3.0 * temp_j;
             gradient.col(i + 3) += temp_j;
         }
     }
-    else
+    else  // mini acc
     {
         Eigen::Vector3d acc, temp_acc;
 
@@ -469,6 +503,10 @@ void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, double& cost
         {
             /* evaluate acc */
             acc = q.col(i + 2) - 2 * q.col(i + 1) + q.col(i);
+            if (traj_mode == ROLL)
+            {
+                acc(2) = 0.0;  // 不考虑z轴
+            }
             cost += acc.squaredNorm();
             temp_acc = 2.0 * acc;
             /* acc gradient */
@@ -757,7 +795,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
 
     if (flag_new_obs_valid)
     {
-        vector<vector<Eigen::Vector3d>> a_star_pathes;
+        vector<vector<PathNode>> a_star_pathes;
         for (size_t i = 0; i < segment_ids.size(); ++i)
         {
             /*** a star search ***/
@@ -788,7 +826,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
                 int Astar_id = a_star_pathes[i].size() / 2,
                     last_Astar_id;  // Let "Astar_id = id_of_the_most_far_away_Astar_point" will be better, but it needs
                                     // more computation
-                double val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law), last_val = val;
+                double val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law), last_val = val;
                 while (Astar_id >= 0 && Astar_id < (int)a_star_pathes[i].size())
                 {
                     last_Astar_id = Astar_id;
@@ -798,19 +836,19 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
                     else
                         ++Astar_id;
 
-                    val = (a_star_pathes[i][Astar_id] - cps_.points.col(j)).dot(ctrl_pts_law);
+                    val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law);
 
                     // cout << val << endl;
 
                     if (val * last_val <= 0 &&
                         (abs(val) > 0 || abs(last_val) > 0))  // val = last_val = 0.0 is not allowed
                     {
-                        intersection_point =
-                            a_star_pathes[i][Astar_id] +
-                            ((a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]) *
-                             (ctrl_pts_law.dot(cps_.points.col(j) - a_star_pathes[i][Astar_id]) /
-                              ctrl_pts_law.dot(a_star_pathes[i][Astar_id] - a_star_pathes[i][last_Astar_id]))  // = t
-                            );
+                        intersection_point = a_star_pathes[i][Astar_id].pos +
+                                             ((a_star_pathes[i][Astar_id].pos - a_star_pathes[i][last_Astar_id].pos) *
+                                              (ctrl_pts_law.dot(cps_.points.col(j) - a_star_pathes[i][Astar_id].pos) /
+                                               ctrl_pts_law.dot(a_star_pathes[i][Astar_id].pos -
+                                                                a_star_pathes[i][last_Astar_id].pos))  // = t
+                                             );
 
                         got_intersection_id = j;
                         break;
@@ -1091,7 +1129,7 @@ void BsplineOptimizer::combineCostRebound(const double* x, double* grad, double&
     Eigen::MatrixXd g_distance = Eigen::MatrixXd::Zero(3, cps_.size);
     Eigen::MatrixXd g_feasibility = Eigen::MatrixXd::Zero(3, cps_.size);
 
-    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);
+    calcSmoothnessCost(cps_.points, cps_.mode, f_smoothness, g_smoothness);
     calcDistanceCostRebound(cps_.points, f_distance, g_distance, iter_num_, f_smoothness);
     calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility);
 
@@ -1113,9 +1151,10 @@ void BsplineOptimizer::combineCostRefine(const double* x, double* grad, double& 
     Eigen::MatrixXd g_fitness = Eigen::MatrixXd::Zero(3, cps_.points.cols());
     Eigen::MatrixXd g_feasibility = Eigen::MatrixXd::Zero(3, cps_.points.cols());
 
-    // time_satrt = ros::Time::now();
+    // time_satrt = ros::Time::now();`
 
-    calcSmoothnessCost(cps_.points, f_smoothness, g_smoothness);
+    // 三项代价：平滑代价、拟合代价、动力学可行性代价
+    calcSmoothnessCost(cps_.points, cps_.mode, f_smoothness, g_smoothness);
     calcFitnessCost(cps_.points, f_fitness, g_fitness);
     calcFeasibilityCost(cps_.points, f_feasibility, g_feasibility);
 

@@ -50,12 +50,14 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                                       Eigen::Vector3d local_target_pt, Eigen::Vector3d local_target_vel,
                                       bool flag_polyInit, bool flag_randomPolyTraj)
 {
+    // 记录调用次数，便于调试重规划是否频繁触发。
     static int count = 0;
     std::cout << endl << "[rebo replan]: -------------------------------------" << count++ << std::endl;
     cout.precision(3);
     cout << "start: " << start_pt.transpose() << ", " << start_vel.transpose()
          << "\ngoal:" << local_target_pt.transpose() << ", " << local_target_vel.transpose() << endl;
 
+    // 起点已经非常接近目标点时，直接认为没有必要继续规划。
     if ((start_pt - local_target_pt).norm() < 0.2)
     {
         cout << "Close to goal" << endl;
@@ -63,10 +65,12 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         return false;
     }
 
+    // 统计本次重规划各阶段耗时。
     ros::Time t_start = ros::Time::now();
     ros::Duration t_init, t_opt, t_refine;
 
-    /*** STEP 1: INIT ***/
+    /*** STEP 1: INIT - 生成初始参考路径和边界导数 ***/
+    // ts 是初始采样步长，距离越近时会放大一点，避免初始路径过短。
     double ts = (start_pt - local_target_pt).norm() > 0.1
                     ? pp_.ctrl_pt_dist / pp_.max_vel_ * 1.2
                     : pp_.ctrl_pt_dist / pp_.max_vel_ *
@@ -74,12 +78,14 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     static bool flag_first_call = true, flag_force_polynomial = false;
     bool flag_regenerate = false;
-    do
+    do  // 采样pointset
     {
+        // 每次重试都重新生成初始点集和边界导数。
         point_set.clear();
         start_end_derivatives.clear();
         flag_regenerate = false;
 
+        // 第一种初始化方式：直接生成一条多项式轨迹作为初始参考。
         if (flag_first_call || flag_polyInit ||
             flag_force_polynomial /*|| ( start_pt - local_target_pt ).norm() < 1.0*/)  // Initial path generated from a
                                                                                        // min-snap traj by order.
@@ -89,12 +95,14 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
             PolynomialTraj gl_traj;
 
+            // 根据距离和最大速度/加速度，估算一段足够平滑的总时间。
             double dist = (start_pt - local_target_pt).norm();
             double time =
                 pow(pp_.max_vel_, 2) / pp_.max_acc_ > dist
                     ? sqrt(dist / pp_.max_acc_)
                     : (dist - pow(pp_.max_vel_, 2) / pp_.max_acc_) / pp_.max_vel_ + 2 * pp_.max_vel_ / pp_.max_acc_;
 
+            // 不随机时，直接连成单段多项式；随机时，在中间插一个扰动点。
             if (!flag_randomPolyTraj)
             {
                 gl_traj = PolynomialTraj::one_segment_traj_gen(start_pt, start_vel, start_acc, local_target_pt,
@@ -102,6 +110,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             }
             else
             {
+                // 用与起终点方向正交的两个方向生成随机中间点，增加初始路径多样性。
                 Eigen::Vector3d horizen_dir =
                     ((start_pt - local_target_pt).cross(Eigen::Vector3d(0, 0, 1))).normalized();
                 Eigen::Vector3d vertical_dir = ((start_pt - local_target_pt).cross(horizen_dir)).normalized();
@@ -121,6 +130,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                                                       Eigen::Vector3d::Zero(), t);
             }
 
+            // 沿初始轨迹采样，得到后续用于 B 样条参数化的点集。
             double t;
             bool flag_too_far;
             ts *= 1.5;  // ts will be divided by 1.5 in the next
@@ -133,6 +143,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 for (t = 0; t < time; t += ts)
                 {
                     Eigen::Vector3d pt = gl_traj.evaluate(t);
+                    // 若相邻采样点过稀，则缩小步长重新采样。
                     if ((last_pt - pt).norm() > pp_.ctrl_pt_dist * 1.5)
                     {
                         flag_too_far = true;
@@ -148,11 +159,12 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             start_end_derivatives.push_back(gl_traj.evaluateAcc(0));
             start_end_derivatives.push_back(gl_traj.evaluateAcc(t));
         }
-        else  // Initial path generated from previous trajectory.
+        else  // 第二种初始化方式：沿上一条可行轨迹继续外推，复用已有规划结果。
         {
             double t;
             double t_cur = (ros::Time::now() - local_data_.start_time_).toSec();
 
+            // 先把上一条轨迹转成伪弧长，再按弧长均匀抽样。
             vector<double> pseudo_arc_length;
             vector<Eigen::Vector3d> segment_point;
             pseudo_arc_length.push_back(0.0);
@@ -172,6 +184,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 (local_data_.position_traj_.evaluateDeBoorT(t) - local_target_pt).norm() / pp_.max_vel_ * 2;
             if (poly_time > ts)
             {
+                // 末端不足时，补一段多项式把当前位置接到目标点。
                 PolynomialTraj gl_traj = PolynomialTraj::one_segment_traj_gen(
                     local_data_.position_traj_.evaluateDeBoorT(t), local_data_.velocity_traj_.evaluateDeBoorT(t),
                     local_data_.acceleration_traj_.evaluateDeBoorT(t), local_target_pt, local_target_vel,
@@ -200,6 +213,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             size_t id = 0;
             do
             {
+                // 不断减小采样间隔，直到点数足够多。
                 cps_dist /= 1.5;
                 point_set.clear();
                 sample_length = 0;
@@ -226,6 +240,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             start_end_derivatives.push_back(local_data_.acceleration_traj_.evaluateDeBoorT(t_cur));
             start_end_derivatives.push_back(Eigen::Vector3d::Zero());
 
+            // 如果初始路径过长，强制回到多项式初始化重试一次。
             if (point_set.size() >
                 pp_.planning_horizen_ / pp_.ctrl_pt_dist * 3)  // The initial path is unnormally too long!
             {
@@ -235,12 +250,14 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         }
     } while (flag_regenerate);
 
+    // 将离散点集和起终点导数参数化为 B 样条控制点control points。
     Eigen::MatrixXd ctrl_pts;
     UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
 
     vector<vector<Eigen::Vector3d>> a_star_pathes;
     a_star_pathes = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
 
+    // 记录初始化阶段耗时，并显示初始路径和 A* 路径。
     t_init = ros::Time::now() - t_start;
 
     static int vis_id = 0;
@@ -249,7 +266,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
     t_start = ros::Time::now();
 
-    /*** STEP 2: OPTIMIZE ***/
+    /*** STEP 2: OPTIMIZE - 对 B 样条控制点做避障和平滑优化 ***/
     bool flag_step_1_success = bspline_optimizer_rebound_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
     cout << "first_optimize_step_success=" << flag_step_1_success << endl;
     if (!flag_step_1_success)
@@ -263,7 +280,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     t_opt = ros::Time::now() - t_start;
     t_start = ros::Time::now();
 
-    /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY ***/
+    /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY - 检查动力学约束 ***/
     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
     pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
 
@@ -271,6 +288,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     bool flag_step_2_success = true;
     if (!pos.checkFeasibility(ratio, false))
     {
+        // 若速度/加速度超限，就通过拉长时间来重新分配轨迹参数。
         cout << "Need to reallocate time." << endl;
 
         Eigen::MatrixXd optimal_control_points;
@@ -289,7 +307,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
     t_refine = ros::Time::now() - t_start;
 
-    // save planned results
+    // 保存最终轨迹，供后续跟踪控制器使用。
     updateTrajInfo(pos, ros::Time::now());
 
     cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec()

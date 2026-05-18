@@ -310,11 +310,17 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     return false;
 }  // end AstarSearch
 
-vector<Vector3d> AStar::getPath()
+vector<PathNode> AStar::getPath()
 {
-    vector<Vector3d> path;
+    vector<PathNode> path;
 
-    for (auto ptr : gridPath_) path.push_back(Index2Coord(ptr->index));
+    for (auto ptr : gridPath_)
+    {
+        PathNode node;
+        node.pos = Index2Coord(ptr->index);
+        node.mode = ptr->mode;
+        path.push_back(node);
+    }
 
     reverse(path.begin(), path.end());
     return path;
