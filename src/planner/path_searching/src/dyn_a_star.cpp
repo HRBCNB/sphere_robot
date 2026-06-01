@@ -40,6 +40,10 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("a_star/max_jump_h", max_jump_h_, 0.6);
     nh.param("a_star/max_jump_d", max_jump_d_, 1.5);
     nh.param("a_star/jump_penalty", jump_penalty_, 5.0);
+
+    nh.param("planner/max_jump_h", max_jump_h_, max_jump_h_);
+    nh.param("planner/max_jump_d", max_jump_d_, max_jump_d_);
+    nh.param("planner/jump_penalty", jump_penalty_, jump_penalty_);
 }
 
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
@@ -159,10 +163,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     startPtr->gScore = 0;
     startPtr->fScore = getHeu(startPtr, endPtr);
     startPtr->state = GridNode::OPENSET;  // put start node in open set
+    startPtr->mode = ego_planner::ROLL;
     startPtr->cameFrom = NULL;
     openSet_.push(startPtr);  // put start in open set
 
     endPtr->index = end_idx;
+    endPtr->mode = ego_planner::ROLL;
 
     double tentative_gScore;
 
@@ -172,6 +178,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         num_iter++;
         current = openSet_.top();
         openSet_.pop();
+        if (current->state == GridNode::CLOSEDSET) continue;
 
         // if ( num_iter < 10000 )
         //     cout << "current=" << current->index.transpose() << endl;
@@ -262,7 +269,8 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                                 jumpNodePtr->fScore = tentative_gScore + getHeu(jumpNodePtr, endPtr);
 
                                 // 标记为 JUMP 模式，用于 retrievePath 生成拱形轨迹
-                                jumpNodePtr->mode = GridNode::JUMP;
+                                jumpNodePtr->mode = ego_planner::JUMP;
+                                openSet_.push(jumpNodePtr);
                             }
                             // 找到第一个最优落脚点后，跳出当前方向的 dist 循环
                             break;
@@ -284,6 +292,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                         neighborPtr->cameFrom = current;
                         neighborPtr->gScore = tentative_gScore;
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
+                        neighborPtr->mode = ego_planner::ROLL;
                         openSet_.push(neighborPtr);  // put neighbor in open set and record it.
                     }
                     else if (tentative_gScore < neighborPtr->gScore)  // 已经拓展过，更新
@@ -291,6 +300,8 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                         neighborPtr->cameFrom = current;
                         neighborPtr->gScore = tentative_gScore;
                         neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
+                        neighborPtr->mode = ego_planner::ROLL;
+                        openSet_.push(neighborPtr);
                     }
                 }
             }  // end of for loop of neighbor expansion
@@ -328,33 +339,70 @@ vector<PathNode> AStar::getPath()
 
 bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_pos)
 {
+    if (!grid_map_->isInMap(start_pos) || !grid_map_->isInMap(landing_pos))
+    {
+        return false;
+    }
+
     if (checkOccupancy(landing_pos))
     {
         return false;
     }
 
     double dist = (landing_pos - start_pos).norm();
-    int num_checks = static_cast<int>(dist / (step_size_ / 2.0));  // 检验点数量
+    int num_checks = max(2, static_cast<int>(dist / (step_size_ / 2.0)));  // 检验点数量
 
-    // 3. 沿途高度校验
+    // 3. 沿途高度校验（抛物线轨迹模拟）
+    // 计算抛物线参数
+    double horizontal_dist = (landing_pos.head<2>() - start_pos.head<2>()).norm();
+    double start_z = start_pos.z();
+    double end_z = landing_pos.z();
+    if (horizontal_dist < 1e-3 || horizontal_dist > max_jump_d_ || fabs(end_z - start_z) > max_jump_h_)
+    {
+        return false;
+    }
+
+    // 假设跳跃最高点在水平距离的中点，且高于起始点和落点
+    double peak_h = fmax(start_z, end_z) + max_jump_h_;  // 调整峰值高度，确保在max_jump_h_范围内
+
+    // 计算抛物线系数 z = a * x^2 + b * x + c
+    // 简化处理，假设水平轴为x，垂直轴为z
+    // 我们知道三个点: (0, start_z), (horizontal_dist / 2, peak_h), (horizontal_dist, end_z)
+    // a * 0^2 + b * 0 + c = start_z  => c = start_z
+    // a * (horizontal_dist / 2)^2 + b * (horizontal_dist / 2) + start_z = peak_h
+    // a * horizontal_dist^2 + b * horizontal_dist + start_z = end_z
+
+    if (!grid_map_->isInMap(Vector3d((start_pos.x() + landing_pos.x()) * 0.5,
+                                     (start_pos.y() + landing_pos.y()) * 0.5, peak_h)))
+    {
+        return false;
+    }
+
+    double a = (2 * peak_h - start_z - end_z) / (-(horizontal_dist * horizontal_dist / 2));
+    double b = (end_z - start_z - a * horizontal_dist * horizontal_dist) / horizontal_dist;
+    double c = start_z;
+
     for (int i = 1; i < num_checks; i++)
     {
-        Vector3d check_pos = start_pos + (landing_pos - start_pos) * (static_cast<double>(i) / num_checks);
+        // 在水平方向上插值
+        double ratio = static_cast<double>(i) / num_checks;
+        Vector2d check_pos_2d = start_pos.head<2>() + (landing_pos.head<2>() - start_pos.head<2>()) * ratio;
+        double current_h_on_parabola = a * pow(horizontal_dist * ratio, 2) + b * (horizontal_dist * ratio) + c;
 
-        // 如果这个位置有障碍物
+        Vector3d check_pos(check_pos_2d.x(), check_pos_2d.y(), current_h_on_parabola);
+
+        // 检查路径点是否在地图范围内
+        if (!grid_map_->isInMap(check_pos))
+        {
+            return false;  // 如果路径点超出地图范围，则认为不可行
+        }
+
+        // 如果该点在障碍物中，且高度低于跳跃轨迹的高度，则认为碰撞
         if (checkOccupancy(check_pos))
         {
-            // 获取该位置障碍物的最高点高度
-            // 假设你使用的是 EGO-Planner 常见的 grid_map 接口
-            double obs_h = grid_map_->getObstacleHeight(check_pos);
-
-            // 物理约束判定：障碍物相对起跳点的高度是否超过了最大跳跃高度 (0.5m)
-            if ((obs_h - start_pos.z()) > max_jump_h_)
-            {
-                return false;  // 障碍物太高了，跳不过去
-            }
+            return false;  // 轨迹与障碍物碰撞
         }
     }
 
-    return true;  // 即使有障碍物，但只要没超过 max_jump_h_，就判定为可行
+    return true;  // 跳跃路径可行
 }

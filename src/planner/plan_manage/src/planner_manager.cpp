@@ -254,6 +254,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     Eigen::MatrixXd ctrl_pts;
     UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
 
+    // 通过Astar来使轨迹无碰撞
     vector<vector<Eigen::Vector3d>> a_star_pathes;
     a_star_pathes = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
 
@@ -292,6 +293,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         cout << "Need to reallocate time." << endl;
 
         Eigen::MatrixXd optimal_control_points;
+        // 时间重分配
         flag_step_2_success = refineTrajAlgo(pos, start_end_derivatives, ratio, ts, optimal_control_points);
         if (flag_step_2_success) pos = UniformBspline(optimal_control_points, 3, ts);
     }
@@ -338,7 +340,7 @@ bool EGOPlannerManager::planGlobalTrajWaypoints(const Eigen::Vector3d& start_pos
 {
     // generate global reference trajectory
 
-    vector<Eigen::Vector3d> points;
+    vector<Eigen::Vector3d> points;  // 存放全局轨迹 起始点+中间点+终点
     points.push_back(start_pos);
 
     for (size_t wp_i = 0; wp_i < waypoints.size(); wp_i++)
@@ -370,23 +372,24 @@ bool EGOPlannerManager::planGlobalTrajWaypoints(const Eigen::Vector3d& start_pos
             {
                 Eigen::Vector3d inter_pt =
                     points.at(i) * (1.0 - double(j) / id_num) + points.at(i + 1) * double(j) / id_num;
-                inter_points.push_back(inter_pt);
+                inter_points.push_back(inter_pt);  // 在中间插点
             }
         }
     }
 
-    inter_points.push_back(points.back());
+    inter_points.push_back(points.back());  // 终点
 
     // for ( int i=0; i<inter_points.size(); i++ )
     // {
     //   cout << inter_points[i].transpose() << endl;
     // }
 
-    // write position matrix
+    // write position matrix 位置矩阵
     int pt_num = inter_points.size();
     Eigen::MatrixXd pos(3, pt_num);
     for (int i = 0; i < pt_num; ++i) pos.col(i) = inter_points[i];
 
+    // 为每一段分配速度
     Eigen::Vector3d zero(0, 0, 0);
     Eigen::VectorXd time(pt_num - 1);
     for (int i = 0; i < pt_num - 1; ++i)
@@ -397,6 +400,7 @@ bool EGOPlannerManager::planGlobalTrajWaypoints(const Eigen::Vector3d& start_pos
     time(0) *= 2.0;
     time(time.rows() - 1) *= 2.0;
 
+    // 定义多项式轨迹，通过minisnap求解
     PolynomialTraj gl_traj;
     if (pos.cols() >= 3)
         gl_traj = PolynomialTraj::minSnapTraj(pos, start_vel, end_vel, start_acc, end_acc, time);
@@ -407,6 +411,7 @@ bool EGOPlannerManager::planGlobalTrajWaypoints(const Eigen::Vector3d& start_pos
         return false;
 
     auto time_now = ros::Time::now();
+    // 传入全局轨迹的时间
     global_data_.setGlobalTraj(gl_traj, time_now);
 
     return true;
@@ -484,6 +489,7 @@ bool EGOPlannerManager::refineTrajAlgo(UniformBspline& traj, vector<Eigen::Vecto
     Eigen::MatrixXd ctrl_pts;  // = traj.getControlPoint()
 
     // std::cout << "ratio: " << ratio << std::endl;
+    // 得到控制点
     reparamBspline(traj, start_end_derivative, ratio, ctrl_pts, ts, t_inc);
 
     traj = UniformBspline(ctrl_pts, 3, ts);
@@ -493,6 +499,7 @@ bool EGOPlannerManager::refineTrajAlgo(UniformBspline& traj, vector<Eigen::Vecto
     for (double t = 0; t < traj.getTimeSum() + 1e-4; t += t_step)
         bspline_optimizer_rebound_->ref_pts_.push_back(traj.evaluateDeBoorT(t));
 
+    // b样条轨迹重优化
     bool success = bspline_optimizer_rebound_->BsplineOptimizeTrajRefine(ctrl_pts, ts, optimal_control_points);
 
     return success;

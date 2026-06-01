@@ -6,6 +6,8 @@
 #include <ros/ros.h>
 
 #include <Eigen/Eigen>
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <queue>
 
@@ -25,7 +27,7 @@ enum TRAJ_MODE
 struct PathNode
 {
     Eigen::Vector3d pos;
-    TRAJ_MODE mode;
+    ego_planner::TRAJ_MODE mode{ego_planner::ROLL};
 };
 struct GridNode
 {
@@ -36,21 +38,12 @@ struct GridNode
         UNDEFINED = 3
     };
 
-    enum enum_mode
-    {
-        ROLL = 1,
-        JUMP = 2
-    };
-
     int rounds{0};  // Distinguish every call
     enum enum_state state
     {
         UNDEFINED
     };
-    enum enum_mode mode
-    {
-        ROLL
-    };
+    ego_planner::TRAJ_MODE mode{ego_planner::ROLL};
     Eigen::Vector3i index;
 
     double gScore{inf}, fScore{inf};

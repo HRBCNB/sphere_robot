@@ -21,7 +21,7 @@ namespace ego_planner
 class ControlPoints
 {
    public:
-    TRAJ_MODE mode;
+    TRAJ_MODE mode{ROLL};
     double clearance;
     int size;
     Eigen::MatrixXd points;  // control points, 3 x N
@@ -34,6 +34,7 @@ class ControlPoints
     void resize(const int size_set)
     {
         size = size_set;
+        mode = ROLL;
 
         base_point.clear();
         direction.clear();

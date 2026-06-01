@@ -121,6 +121,7 @@ std::vector<PathNode> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_
     // 对每个碰撞段跑 A*
     /*** a star search ***/
     vector<vector<PathNode>> a_star_pathes;
+    bool has_jump_segment = false;
     for (size_t i = 0; i < segment_ids.size(); ++i)
     {
         // cout << "in=" << in.transpose() << " out=" << out.transpose() << endl;
@@ -128,6 +129,14 @@ std::vector<PathNode> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_
         if (a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ 0.1, in, out))
         {
             a_star_pathes.push_back(a_star_->getPath());
+            for (const auto& node : a_star_pathes.back())
+            {
+                if (node.mode == JUMP)
+                {
+                    has_jump_segment = true;
+                    break;
+                }
+            }
         }
         else
         {
@@ -135,6 +144,7 @@ std::vector<PathNode> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_
             return a_star_pathes;
         }
     }
+    cps_.mode = has_jump_segment ? JUMP : ROLL;
 
     /*** calculate bounds ***/
     // 计算每段可扩展边界 bounds
@@ -796,6 +806,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
     if (flag_new_obs_valid)
     {
         vector<vector<PathNode>> a_star_pathes;
+        bool has_jump_segment = false;
         for (size_t i = 0; i < segment_ids.size(); ++i)
         {
             /*** a star search ***/
@@ -803,6 +814,14 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
             if (a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ 0.1, in, out))
             {
                 a_star_pathes.push_back(a_star_->getPath());
+                for (const auto& node : a_star_pathes.back())
+                {
+                    if (node.mode == JUMP)
+                    {
+                        has_jump_segment = true;
+                        break;
+                    }
+                }
             }
             else
             {
@@ -811,6 +830,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
                 i--;
             }
         }
+        cps_.mode = has_jump_segment ? JUMP : ROLL;
 
         /*** Assign parameters to each segment ***/
         for (size_t i = 0; i < segment_ids.size(); ++i)
