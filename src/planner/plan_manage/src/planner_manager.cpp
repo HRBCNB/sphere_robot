@@ -255,7 +255,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
 
     // 通过Astar来使轨迹无碰撞
-    vector<vector<Eigen::Vector3d>> a_star_pathes;
+    vector<vector<PathNode>> a_star_pathes;
     a_star_pathes = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
 
     // 记录初始化阶段耗时，并显示初始路径和 A* 路径。

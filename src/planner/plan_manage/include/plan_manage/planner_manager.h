@@ -13,10 +13,6 @@
 
 namespace ego_planner
 {
-enum TRAJ_MODE
-{
-    ROLL = 1, JUMP = 2
-};
 
 // Fast Planner Manager
 // Key algorithms of mapping and planning are called

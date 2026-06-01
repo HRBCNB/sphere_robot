@@ -50,7 +50,8 @@ void BsplineOptimizer::setBsplineInterval(const double& ts)
  * @param flag_first_init 是否为首次初始化
  * @return 控制点列表
  */
-std::vector<PathNode> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_points, bool flag_first_init /*= true*/)
+std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::MatrixXd& init_points,
+                                                                       bool flag_first_init /*= true*/)
 {
     // 初始化内部控制点容器
     if (flag_first_init)
@@ -478,7 +479,7 @@ void BsplineOptimizer::calcFitnessCost(const Eigen::MatrixXd& q, double& cost, E
  * @param 平滑性代价梯度
  * @param falg_use_jerk 是否使用jerk （true：minijerk；false：miniacc）默认使用jerk。
  */
-void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, int traj_mode, double& cost,
+void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE traj_mode, double& cost,
                                           Eigen::MatrixXd& gradient, bool falg_use_jerk /* = true*/)
 {
     cost = 0.0;

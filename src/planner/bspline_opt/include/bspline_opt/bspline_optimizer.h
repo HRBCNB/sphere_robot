@@ -85,8 +85,7 @@ class BsplineOptimizer
     AStar::Ptr a_star_;
     std::vector<Eigen::Vector3d> ref_pts_;
 
-    std::vector<std::vector<Eigen::Vector3d>> initControlPoints(Eigen::MatrixXd& init_points,
-                                                                bool flag_first_init = true);
+    std::vector<std::vector<PathNode>> initControlPoints(Eigen::MatrixXd& init_points, bool flag_first_init = true);
     bool BsplineOptimizeTrajRebound(Eigen::MatrixXd& optimal_points,
                                     double ts);  // must be called after initControlPoints()
     bool BsplineOptimizeTrajRefine(const Eigen::MatrixXd& init_points, const double ts,
@@ -147,7 +146,7 @@ class BsplineOptimizer
     void combineCost(const std::vector<double>& x, vector<double>& grad, double& cost);
 
     // q contains all control points
-    void calcSmoothnessCost(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient,
+    void calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE traj_mode, double& cost, Eigen::MatrixXd& gradient,
                             bool falg_use_jerk = true);
     void calcFeasibilityCost(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient);
     void calcDistanceCostRebound(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient, int iter_num,

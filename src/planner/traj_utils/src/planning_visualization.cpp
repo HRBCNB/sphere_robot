@@ -222,7 +222,7 @@ void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> 
         for (auto& node : block)
         {
             // 提取pos
-            list.push_back(node.position);
+            list.push_back(node.pos);
         }
         // Eigen::Vector4d color(0.5,0.5,0,1);
         displayMarkerList(a_star_list_pub, list, scale, color,
