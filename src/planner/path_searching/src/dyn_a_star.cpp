@@ -243,9 +243,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                         {
                             // 落点
                             Vector3i landing_idx;
-                            if (!Coord2Index(landing_pos, landing_idx))
+                            if (!Coord2IndexNoWarn(landing_pos, landing_idx))
                             {
-                                // 落点idx转换失败
+                                // 落点在当前 A* 局部搜索池外，跳过这个候选。
                                 continue;
                             }
                             GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
@@ -325,15 +325,46 @@ vector<PathNode> AStar::getPath()
 {
     vector<PathNode> path;
 
-    for (auto ptr : gridPath_)
+    vector<GridNodePtr> forward_path = gridPath_;
+    reverse(forward_path.begin(), forward_path.end());
+
+    for (size_t i = 0; i < forward_path.size(); ++i)
     {
+        auto ptr = forward_path[i];
         PathNode node;
         node.pos = Index2Coord(ptr->index);
         node.mode = ptr->mode;
+
+        if (i > 0 && ptr->mode == ego_planner::JUMP)
+        {
+            Eigen::Vector3d start_pos = Index2Coord(forward_path[i - 1]->index);
+            Eigen::Vector3d landing_pos = node.pos;
+            Eigen::Vector2d delta_xy = landing_pos.head<2>() - start_pos.head<2>();
+            double horizontal_dist = delta_xy.norm();
+
+            if (horizontal_dist > 1e-3)
+            {
+                double start_z = start_pos.z();
+                double end_z = landing_pos.z();
+                int num_samples = max(2, static_cast<int>(ceil(horizontal_dist / step_size_)));
+
+                for (int sample = 1; sample <= num_samples; ++sample)
+                {
+                    double ratio = static_cast<double>(sample) / num_samples;
+                    PathNode jump_node;
+                    jump_node.pos.head<2>() = start_pos.head<2>() + delta_xy * ratio;
+                    jump_node.pos.z() = (1.0 - ratio) * start_z + ratio * end_z +
+                                        4.0 * max_jump_h_ * ratio * (1.0 - ratio);
+                    jump_node.mode = ego_planner::JUMP;
+                    path.push_back(jump_node);
+                }
+                continue;
+            }
+        }
+
         path.push_back(node);
     }
 
-    reverse(path.begin(), path.end());
     return path;
 }
 

@@ -77,6 +77,7 @@ class AStar
     bool isJumpFeasible(const Eigen::Vector3d& start_pos, const Eigen::Vector3d& landing_pos);
     inline Eigen::Vector3d Index2Coord(const Eigen::Vector3i& index) const;
     inline bool Coord2Index(const Eigen::Vector3d& pt, Eigen::Vector3i& idx) const;
+    inline bool Coord2IndexNoWarn(const Eigen::Vector3d& pt, Eigen::Vector3i& idx) const;
 
     // bool (*checkOccupancyPtr)( const Eigen::Vector3d &pos );
 
@@ -140,6 +141,14 @@ inline bool AStar::Coord2Index(const Eigen::Vector3d& pt, Eigen::Vector3i& idx) 
     }
 
     return true;
+};
+
+inline bool AStar::Coord2IndexNoWarn(const Eigen::Vector3d& pt, Eigen::Vector3i& idx) const
+{
+    idx = ((pt - center_) * inv_step_size_ + Eigen::Vector3d(0.5, 0.5, 0.5)).cast<int>() + CENTER_IDX_;
+
+    return idx(0) >= 0 && idx(0) < POOL_SIZE_(0) && idx(1) >= 0 && idx(1) < POOL_SIZE_(1) && idx(2) >= 0 &&
+           idx(2) < POOL_SIZE_(2);
 };
 
 #endif

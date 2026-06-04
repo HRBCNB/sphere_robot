@@ -123,6 +123,7 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
     /*** a star search ***/
     vector<vector<PathNode>> a_star_pathes;
     bool has_jump_segment = false;
+    int jump_segment_num = 0;
     for (size_t i = 0; i < segment_ids.size(); ++i)
     {
         // cout << "in=" << in.transpose() << " out=" << out.transpose() << endl;
@@ -130,13 +131,19 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
         if (a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ 0.1, in, out))
         {
             a_star_pathes.push_back(a_star_->getPath());
+            bool block_has_jump = false;
             for (const auto& node : a_star_pathes.back())
             {
                 if (node.mode == JUMP)
                 {
+                    block_has_jump = true;
                     has_jump_segment = true;
                     break;
                 }
+            }
+            if (block_has_jump)
+            {
+                ++jump_segment_num;
             }
         }
         else
@@ -146,6 +153,8 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
         }
     }
     cps_.mode = has_jump_segment ? JUMP : ROLL;
+    ROS_INFO("[BsplineOptimizer] init A* segments: %zu, jump segments: %d, traj mode: %s", a_star_pathes.size(),
+             jump_segment_num, cps_.mode == JUMP ? "JUMP" : "ROLL");
 
     /*** calculate bounds ***/
     // 计算每段可扩展边界 bounds
@@ -808,6 +817,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
     {
         vector<vector<PathNode>> a_star_pathes;
         bool has_jump_segment = false;
+        int jump_segment_num = 0;
         for (size_t i = 0; i < segment_ids.size(); ++i)
         {
             /*** a star search ***/
@@ -815,13 +825,19 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
             if (a_star_->AstarSearch(/*(in-out).norm()/10+0.05*/ 0.1, in, out))
             {
                 a_star_pathes.push_back(a_star_->getPath());
+                bool block_has_jump = false;
                 for (const auto& node : a_star_pathes.back())
                 {
                     if (node.mode == JUMP)
                     {
+                        block_has_jump = true;
                         has_jump_segment = true;
                         break;
                     }
+                }
+                if (block_has_jump)
+                {
+                    ++jump_segment_num;
                 }
             }
             else
@@ -832,6 +848,8 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
             }
         }
         cps_.mode = has_jump_segment ? JUMP : ROLL;
+        ROS_INFO("[BsplineOptimizer] rebound A* segments: %zu, jump segments: %d, traj mode: %s", a_star_pathes.size(),
+                 jump_segment_num, cps_.mode == JUMP ? "JUMP" : "ROLL");
 
         /*** Assign parameters to each segment ***/
         for (size_t i = 0; i < segment_ids.size(); ++i)

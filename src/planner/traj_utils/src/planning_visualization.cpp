@@ -202,32 +202,50 @@ void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> 
         return;
     }
 
-    int i = 0;
-    vector<Eigen::Vector3d> list;
+    int marker_id = 0;
 
-    Eigen::Vector4d color =
-        Eigen::Vector4d(0.5 + ((double)rand() / RAND_MAX / 2), 0.5 + ((double)rand() / RAND_MAX / 2), 0,
-                        1);  // make the A star pathes different every time.
-    double scale = 0.05 + (double)rand() / RAND_MAX / 10;
-
-    // for ( int i=0; i<10; i++ )
-    // {
-    //   //Eigen::Vector4d color(1,1,0,0);
-    //   displayMarkerList(a_star_list_pub, list, scale, color, id+i);
-    // }
+    const double roll_scale = 0.08;
+    const double jump_scale = 0.14;
+    const Eigen::Vector4d roll_color(0.1, 0.8, 0.2, 1.0);
+    const Eigen::Vector4d jump_color(1.0, 0.1, 0.1, 1.0);
 
     for (auto& block : a_star_paths)
     {
-        list.clear();
-        for (auto& node : block)
+        if (block.empty())
         {
-            // 提取pos
-            list.push_back(node.pos);
+            continue;
         }
-        // Eigen::Vector4d color(0.5,0.5,0,1);
-        displayMarkerList(a_star_list_pub, list, scale, color,
-                          id + i);  // real ids used: [ id ~ id+a_star_paths.size() ]
-        i++;
+
+        vector<Eigen::Vector3d> segment;
+        ego_planner::TRAJ_MODE segment_mode = block.front().mode;
+        segment.push_back(block.front().pos);
+
+        for (size_t node_id = 1; node_id < block.size(); ++node_id)
+        {
+            ego_planner::TRAJ_MODE edge_mode = block[node_id].mode;
+            if (edge_mode != segment_mode)
+            {
+                if (segment.size() >= 2)
+                {
+                    displayMarkerList(a_star_list_pub, segment, segment_mode == JUMP ? jump_scale : roll_scale,
+                                      segment_mode == JUMP ? jump_color : roll_color, id + marker_id);
+                    ++marker_id;
+                }
+
+                segment.clear();
+                segment.push_back(block[node_id - 1].pos);
+                segment_mode = edge_mode;
+            }
+
+            segment.push_back(block[node_id].pos);
+        }
+
+        if (segment.size() >= 2)
+        {
+            displayMarkerList(a_star_list_pub, segment, segment_mode == JUMP ? jump_scale : roll_scale,
+                              segment_mode == JUMP ? jump_color : roll_color, id + marker_id);
+            ++marker_id;
+        }
     }
 }
 
