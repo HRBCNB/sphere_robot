@@ -40,10 +40,12 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("a_star/max_jump_h", max_jump_h_, 0.6);
     nh.param("a_star/max_jump_d", max_jump_d_, 1.5);
     nh.param("a_star/jump_penalty", jump_penalty_, 5.0);
+    nh.param("a_star/line_deviation_weight", line_dev_weight_, 2.0);
 
     nh.param("planner/max_jump_h", max_jump_h_, max_jump_h_);
     nh.param("planner/max_jump_d", max_jump_d_, max_jump_d_);
     nh.param("planner/jump_penalty", jump_penalty_, jump_penalty_);
+    nh.param("planner/line_deviation_weight", line_dev_weight_, line_dev_weight_);
 }
 
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
@@ -152,6 +154,20 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     GridNodePtr startPtr = GridNodeMap_[start_idx(0)][start_idx(1)][start_idx(2)];
     GridNodePtr endPtr = GridNodeMap_[end_idx(0)][end_idx(1)][end_idx(2)];
 
+    const Eigen::Vector2d line_start = start_pt.head<2>();
+    const Eigen::Vector2d line_end = end_pt.head<2>();
+    const Eigen::Vector2d line_vec = line_end - line_start;
+    const double line_len = line_vec.norm();
+    auto lineDeviationCost = [&](const Eigen::Vector3d& pos) {
+        if (line_dev_weight_ <= 1e-6 || line_len < 1e-6)
+        {
+            return 0.0;
+        }
+        const Eigen::Vector2d rel = pos.head<2>() - line_start;
+        const double cross = fabs(line_vec.x() * rel.y() - line_vec.y() * rel.x());
+        return line_dev_weight_ * cross / line_len;
+    };
+
     std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, NodeComparator> empty;
     openSet_.swap(empty);
 
@@ -258,7 +274,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                             jumpNodePtr->index = landing_idx;
 
                             // 计算跳跃代价：物理距离 + 创新点惩罚
-                            double jump_cost = dist + jump_penalty_;
+                            double jump_cost = dist + jump_penalty_ + lineDeviationCost(landing_pos);
                             double tentative_gScore = current->gScore + jump_cost;
 
                             bool jump_explored = (jumpNodePtr->rounds == rounds_);
@@ -290,7 +306,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 {
                     // 代价
                     double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
-                    tentative_gScore = current->gScore + static_cost;
+                    tentative_gScore = current->gScore + static_cost + lineDeviationCost(Index2Coord(neighborIdx));
 
                     if (!flag_explored)  // 没有拓展过，加入open set
                     {

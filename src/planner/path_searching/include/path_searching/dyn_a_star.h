@@ -94,9 +94,10 @@ class AStar
     const double tie_breaker_ = 1.0 + 1.0 / 10000;
 
     // Multi-modal planning parameters
-    double max_jump_h_;    // Maximum jump height (m)
-    double max_jump_d_;    // Maximum jump distance (m)
-    double jump_penalty_;  // Extra cost for jumping
+    double max_jump_h_;          // Maximum jump height (m)
+    double max_jump_d_;          // Maximum jump distance (m)
+    double jump_penalty_;        // Extra cost for jumping
+    double line_dev_weight_;     // Cost weight for deviation from the start-goal line
 
     std::vector<GridNodePtr> gridPath_;
 
