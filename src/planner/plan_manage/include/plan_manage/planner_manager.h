@@ -38,6 +38,7 @@ class EGOPlannerManager
                                  const Eigen::Vector3d& end_vel, const Eigen::Vector3d& end_acc);
 
     void initPlanModules(ros::NodeHandle& nh, PlanningVisualization::Ptr vis = NULL);
+    bool isAStarOnly() const { return astar_only_; }
 
     PlanParameters pp_;
     LocalTrajData local_data_;
@@ -51,6 +52,13 @@ class EGOPlannerManager
     BsplineOptimizer::Ptr bspline_optimizer_rebound_;
 
     int continous_failures_count_{0};
+    bool astar_only_{false};
+    bool astar_test_wall_{false};
+    double astar_height_{0.25};
+    double astar_wall_x_{-13.5};
+    double astar_wall_thickness_{0.4};
+    double astar_wall_y_half_width_{9.0};
+    double astar_wall_height_{0.35};
 
     void updateTrajInfo(const UniformBspline& position_traj, const ros::Time time_now);
 

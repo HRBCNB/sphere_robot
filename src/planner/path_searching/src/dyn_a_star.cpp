@@ -173,6 +173,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     double tentative_gScore;
 
     int num_iter = 0;
+    int occupied_neighbor_count = 0;
+    int jump_candidate_count = 0;
+    int feasible_jump_count = 0;
     while (!openSet_.empty())
     {
         num_iter++;
@@ -229,6 +232,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 // 检测到邻居节点在障碍物中
                 if (checkOccupancy(Index2Coord(neighborPtr->index)))
                 {
+                    ++occupied_neighbor_count;
                     // 定义跳跃搜索方向
                     Vector3d jump_dir = Vector3d(double(dx), double(dy), 0.0).normalized();
                     Vector3d start_pos = Index2Coord(current->index);
@@ -237,10 +241,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                     for (double dist = 0.5; dist <= max_jump_d_; dist += step_size_)
                     {
                         Vector3d landing_pos = start_pos + jump_dir * dist;
+                        ++jump_candidate_count;
 
                         if (isJumpFeasible(start_pos, landing_pos))
                         // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
                         {
+                            ++feasible_jump_count;
                             // 落点
                             Vector3i landing_idx;
                             if (!Coord2IndexNoWarn(landing_pos, landing_idx))
@@ -249,6 +255,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                                 continue;
                             }
                             GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
+                            jumpNodePtr->index = landing_idx;
 
                             // 计算跳跃代价：物理距离 + 创新点惩罚
                             double jump_cost = dist + jump_penalty_;
@@ -308,15 +315,16 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         ros::Time time_2 = ros::Time::now();
         if ((time_2 - time_1).toSec() > 0.2)
         {
-            ROS_WARN("Failed in A star path searching !!! 0.2 seconds time limit exceeded.");
+            ROS_WARN("Failed in A star path searching !!! 0.2 seconds time limit exceeded. iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d",
+                     num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count);
             return false;
         }
     }
 
     ros::Time time_2 = ros::Time::now();
 
-    if ((time_2 - time_1).toSec() > 0.1)
-        ROS_WARN("Time consume in A star path finding is %.3fs, iter=%d", (time_2 - time_1).toSec(), num_iter);
+    ROS_WARN("A star failed: iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d, time=%.3fs",
+             num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count, (time_2 - time_1).toSec());
 
     return false;
 }  // end AstarSearch

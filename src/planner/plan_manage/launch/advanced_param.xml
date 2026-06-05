@@ -35,6 +35,7 @@
   <arg name="point4_z"/>
 
   <arg name="flight_type"/>
+  <arg name="astar_only" default="false"/>
 
   <!-- main node -->
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
@@ -119,6 +120,13 @@
     <param name="manager/control_points_distance" value="0.4" type="double"/>
     <param name="manager/feasibility_tolerance" value="0.05" type="double"/>
     <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
+    <param name="manager/astar_only" value="$(arg astar_only)" type="bool"/>
+    <param name="manager/astar_test_wall" value="false" type="bool"/>
+    <param name="manager/astar_height" value="0.25" type="double"/>
+    <param name="manager/astar_wall_x" value="-13.5" type="double"/>
+    <param name="manager/astar_wall_thickness" value="0.4" type="double"/>
+    <param name="manager/astar_wall_y_half_width" value="9.0" type="double"/>
+    <param name="manager/astar_wall_height" value="0.35" type="double"/>
 
   <!-- trajectory optimization -->
     <param name="optimization/lambda_smooth" value="1.0" type="double"/>

@@ -264,6 +264,14 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
                 changeFSMExecState(EXEC_TRAJ, "FSM");
                 flag_escape_emergency_ = true;
             }
+            // 测试Astar
+            else if (planner_manager_->isAStarOnly())
+            {
+                have_target_ = false;
+                trigger_ = false;
+                ROS_WARN("[EGOReplanFSM] astar_only finished: keep A* markers and stop replanning loop.");
+                changeFSMExecState(WAIT_TARGET, "FSM");
+            }
             else
             {
                 changeFSMExecState(GEN_NEW_TRAJ, "FSM");

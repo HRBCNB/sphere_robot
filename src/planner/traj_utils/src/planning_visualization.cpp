@@ -12,7 +12,7 @@ PlanningVisualization::PlanningVisualization(ros::NodeHandle& nh)
     global_list_pub = nh.advertise<visualization_msgs::Marker>("global_list", 2);
     init_list_pub = nh.advertise<visualization_msgs::Marker>("init_list", 2);
     optimal_list_pub = nh.advertise<visualization_msgs::Marker>("optimal_list", 2);
-    a_star_list_pub = nh.advertise<visualization_msgs::Marker>("a_star_list", 20);
+    a_star_list_pub = nh.advertise<visualization_msgs::Marker>("a_star_list", 20, true);
 }
 
 // // real ids used: {id, id+1000}
@@ -197,56 +197,49 @@ void PlanningVisualization::displayOptimalList(Eigen::MatrixXd optimal_pts, int 
 void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> a_star_paths,
                                              int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)
 {
-    if (a_star_list_pub.getNumSubscribers() == 0)
+    visualization_msgs::Marker points;
+    points.header.frame_id = "world";
+    points.header.stamp = ros::Time::now();
+    points.ns = "a_star_points";
+    points.type = visualization_msgs::Marker::SPHERE_LIST;
+    points.action = visualization_msgs::Marker::ADD;
+    points.id = id;
+    points.pose.orientation.w = 1.0;
+    points.scale.x = 0.18;
+    points.scale.y = 0.18;
+    points.scale.z = 0.18;
+    points.color.a = 1.0;
+
+    geometry_msgs::Point pt;
+    std_msgs::ColorRGBA color;
+    for (const auto& block : a_star_paths)
     {
-        return;
-    }
-
-    int marker_id = 0;
-
-    const double roll_scale = 0.08;
-    const double jump_scale = 0.14;
-    const Eigen::Vector4d roll_color(0.1, 0.8, 0.2, 1.0);
-    const Eigen::Vector4d jump_color(1.0, 0.1, 0.1, 1.0);
-
-    for (auto& block : a_star_paths)
-    {
-        if (block.empty())
+        for (const auto& node : block)
         {
-            continue;
-        }
+            pt.x = node.pos.x();
+            pt.y = node.pos.y();
+            pt.z = node.pos.z();
+            points.points.push_back(pt);
 
-        vector<Eigen::Vector3d> segment;
-        ego_planner::TRAJ_MODE segment_mode = block.front().mode;
-        segment.push_back(block.front().pos);
-
-        for (size_t node_id = 1; node_id < block.size(); ++node_id)
-        {
-            ego_planner::TRAJ_MODE edge_mode = block[node_id].mode;
-            if (edge_mode != segment_mode)
+            if (node.mode == JUMP)
             {
-                if (segment.size() >= 2)
-                {
-                    displayMarkerList(a_star_list_pub, segment, segment_mode == JUMP ? jump_scale : roll_scale,
-                                      segment_mode == JUMP ? jump_color : roll_color, id + marker_id);
-                    ++marker_id;
-                }
-
-                segment.clear();
-                segment.push_back(block[node_id - 1].pos);
-                segment_mode = edge_mode;
+                color.r = 1.0;
+                color.g = 0.05;
+                color.b = 0.05;
+                color.a = 1.0;
             }
-
-            segment.push_back(block[node_id].pos);
-        }
-
-        if (segment.size() >= 2)
-        {
-            displayMarkerList(a_star_list_pub, segment, segment_mode == JUMP ? jump_scale : roll_scale,
-                              segment_mode == JUMP ? jump_color : roll_color, id + marker_id);
-            ++marker_id;
+            else
+            {
+                color.r = 0.05;
+                color.g = 0.85;
+                color.b = 0.1;
+                color.a = 1.0;
+            }
+            points.colors.push_back(color);
         }
     }
+
+    a_star_list_pub.publish(points);
 }
 
 void PlanningVisualization::displayArrowList(ros::Publisher& pub, const vector<Eigen::Vector3d>& list, double scale,

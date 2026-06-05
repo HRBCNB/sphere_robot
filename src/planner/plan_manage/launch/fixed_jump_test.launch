@@ -1,0 +1,98 @@
+<launch>
+  <arg name="map_size_x" default="40.0"/>
+  <arg name="map_size_y" default="40.0"/>
+  <arg name="map_size_z" default="3.0"/>
+  <arg name="odom_topic" default="/visual_slam/odom"/>
+  <arg name="use_rviz" default="false"/>
+  <arg name="auto_goal" default="true"/>
+  <arg name="astar_only" default="true"/>
+  <arg name="use_control" default="false"/>
+  <arg name="goal_x" default="15.0"/>
+  <arg name="goal_y" default="0.0"/>
+  <arg name="goal_z" default="1.0"/>
+
+  <include file="$(find ego_planner)/launch/advanced_param.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+
+    <arg name="camera_pose_topic" value="/pcl_render_node/camera_pose"/>
+    <arg name="depth_topic" value="/pcl_render_node/depth"/>
+    <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
+
+    <arg name="cx" value="321.04638671875"/>
+    <arg name="cy" value="243.44969177246094"/>
+    <arg name="fx" value="387.229248046875"/>
+    <arg name="fy" value="387.229248046875"/>
+
+    <arg name="max_vel" value="2.0"/>
+    <arg name="max_acc" value="3.0"/>
+    <arg name="planning_horizon" value="7.5"/>
+    <arg name="flight_type" value="1"/>
+    <arg name="astar_only" value="$(arg astar_only)"/>
+
+    <arg name="point_num" value="1"/>
+    <arg name="point0_x" value="15.0"/>
+    <arg name="point0_y" value="0.0"/>
+    <arg name="point0_z" value="1.0"/>
+    <arg name="point1_x" value="0.0"/>
+    <arg name="point1_y" value="0.0"/>
+    <arg name="point1_z" value="1.0"/>
+    <arg name="point2_x" value="0.0"/>
+    <arg name="point2_y" value="0.0"/>
+    <arg name="point2_z" value="1.0"/>
+    <arg name="point3_x" value="0.0"/>
+    <arg name="point3_y" value="0.0"/>
+    <arg name="point3_z" value="1.0"/>
+    <arg name="point4_x" value="0.0"/>
+    <arg name="point4_y" value="0.0"/>
+    <arg name="point4_z" value="1.0"/>
+  </include>
+
+  <param name="/ego_planner_node/manager/astar_test_wall" value="true" type="bool"/>
+  <param name="/ego_planner_node/manager/astar_height" value="0.25" type="double"/>
+  <param name="/ego_planner_node/manager/astar_wall_x" value="-13.5" type="double"/>
+  <param name="/ego_planner_node/manager/astar_wall_thickness" value="0.4" type="double"/>
+  <param name="/ego_planner_node/manager/astar_wall_y_half_width" value="9.0" type="double"/>
+  <param name="/ego_planner_node/manager/astar_wall_height" value="0.35" type="double"/>
+
+  <group unless="$(arg astar_only)">
+    <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
+      <remap from="/position_cmd" to="planning/pos_cmd"/>
+      <remap from="/odom_world" to="$(arg odom_topic)"/>
+      <param name="traj_server/time_forward" value="1.0" type="double"/>
+    </node>
+  </group>
+
+  <node pkg="waypoint_generator" name="waypoint_generator" type="waypoint_generator" output="screen">
+    <remap from="~odom" to="$(arg odom_topic)"/>
+    <remap from="~goal" to="/move_base_simple/goal"/>
+    <remap from="~traj_start_trigger" to="/traj_start_trigger"/>
+    <param name="waypoint_type" value="manual-lonely-waypoint"/>
+  </node>
+
+  <include file="$(find ego_planner)/launch/low_obstacle_simulator.xml">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+    <arg name="map_size_z_" value="$(arg map_size_z)"/>
+    <arg name="odometry_topic" value="$(arg odom_topic)"/>
+    <arg name="use_control" value="$(arg use_control)"/>
+  </include>
+
+
+  <group if="$(arg auto_goal)">
+    <node pkg="ego_planner" name="publish_fixed_goal" type="publish_fixed_goal.py" output="screen">
+      <param name="goal_x" value="$(arg goal_x)"/>
+      <param name="goal_y" value="$(arg goal_y)"/>
+      <param name="goal_z" value="$(arg goal_z)"/>
+      <param name="delay" value="4.0"/>
+      <param name="repeat" value="1"/>
+      <param name="interval" value="1.0"/>
+    </node>
+  </group>
+
+  <group if="$(arg use_rviz)">
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find ego_planner)/launch/default.rviz" required="false"/>
+  </group>
+</launch>

@@ -27,6 +27,13 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/feasibility_tolerance", pp_.feasibility_tolerance_, 0.0);
     nh.param("manager/control_points_distance", pp_.ctrl_pt_dist, -1.0);
     nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
+    nh.param("manager/astar_only", astar_only_, false);
+    nh.param("manager/astar_test_wall", astar_test_wall_, false);
+    nh.param("manager/astar_height", astar_height_, 0.25);
+    nh.param("manager/astar_wall_x", astar_wall_x_, -13.5);
+    nh.param("manager/astar_wall_thickness", astar_wall_thickness_, 0.4);
+    nh.param("manager/astar_wall_y_half_width", astar_wall_y_half_width_, 9.0);
+    nh.param("manager/astar_wall_height", astar_wall_height_, 0.35);
 
     local_data_.traj_id_ = 0;
     grid_map_.reset(new GridMap);
@@ -62,6 +69,91 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     {
         cout << "Close to goal" << endl;
         continous_failures_count_++;
+        return false;
+    }
+
+    if (astar_only_)
+    {
+        Eigen::Vector3d astar_start = start_pt;
+        Eigen::Vector3d astar_goal = local_target_pt;
+        astar_start.z() = astar_height_;
+        astar_goal.z() = astar_height_;
+
+        if (astar_test_wall_)
+        {
+            const double res = 0.1;
+            int occupied_points = 0;
+            for (double x = astar_wall_x_ - astar_wall_thickness_ * 0.5; x <= astar_wall_x_ + astar_wall_thickness_ * 0.5 + 1e-6; x += res)
+            {
+                for (double y = -astar_wall_y_half_width_; y <= astar_wall_y_half_width_ + 1e-6; y += res)
+                {
+                    for (double z = 0.0; z <= astar_wall_height_ + 1e-6; z += res)
+                    {
+                        grid_map_->setOccupied(Eigen::Vector3d(x, y, z));
+                        ++occupied_points;
+                    }
+                }
+            }
+            ROS_WARN("[EGOPlannerManager] astar_only inserted test wall into occupancy: x=%.2f, y=[%.2f, %.2f], h=%.2f, voxels=%d",
+                     astar_wall_x_, -astar_wall_y_half_width_, astar_wall_y_half_width_, astar_wall_height_, occupied_points);
+        }
+
+        vector<vector<PathNode>> a_star_pathes;
+        if (bspline_optimizer_rebound_->a_star_->AstarSearch(0.1, astar_start, astar_goal))
+        {
+            a_star_pathes.push_back(bspline_optimizer_rebound_->a_star_->getPath());
+        }
+        else
+        {
+            ROS_ERROR("[EGOPlannerManager] astar_only direct A* search failed. projected start=(%.2f %.2f %.2f), goal=(%.2f %.2f %.2f)",
+                      astar_start.x(), astar_start.y(), astar_start.z(), astar_goal.x(), astar_goal.y(), astar_goal.z());
+        }
+
+        int total_nodes = 0;
+        int jump_nodes = 0;
+        bool printed_first_jump = false;
+        Eigen::Vector3d first_jump = Eigen::Vector3d::Zero();
+        Eigen::Vector3d last_jump = Eigen::Vector3d::Zero();
+        for (const auto& path : a_star_pathes)
+        {
+            total_nodes += static_cast<int>(path.size());
+            for (const auto& node : path)
+            {
+                if (node.mode == JUMP)
+                {
+                    ++jump_nodes;
+                    if (!printed_first_jump)
+                    {
+                        first_jump = node.pos;
+                        printed_first_jump = true;
+                    }
+                    last_jump = node.pos;
+                }
+            }
+        }
+
+        if (jump_nodes > 0)
+        {
+            ROS_WARN("[EGOPlannerManager] A* jump span: first=(%.2f %.2f %.2f), last=(%.2f %.2f %.2f)",
+                     first_jump.x(), first_jump.y(), first_jump.z(), last_jump.x(), last_jump.y(), last_jump.z());
+        }
+
+        for (size_t path_id = 0; path_id < a_star_pathes.size(); ++path_id)
+        {
+            const auto& path = a_star_pathes[path_id];
+            ROS_WARN("[EGOPlannerManager] A* path %zu points:", path_id);
+            for (size_t node_id = 0; node_id < path.size(); ++node_id)
+            {
+                const auto& node = path[node_id];
+                ROS_WARN("  [%03zu] %s  x=%.2f y=%.2f z=%.2f", node_id, node.mode == JUMP ? "JUMP" : "ROLL",
+                         node.pos.x(), node.pos.y(), node.pos.z());
+            }
+        }
+
+        visualization_->displayAStarList(a_star_pathes, 0);
+        ROS_WARN("[EGOPlannerManager] astar_only direct A*: paths=%zu, nodes=%d, jump_nodes=%d, z=%.2f. Skip bspline optimization and trajectory publishing.",
+                 a_star_pathes.size(), total_nodes, jump_nodes, astar_height_);
+        continous_failures_count_ = 0;
         return false;
     }
 
@@ -262,7 +354,10 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     t_init = ros::Time::now() - t_start;
 
     static int vis_id = 0;
-    visualization_->displayInitPathList(point_set, 0.2, 0);
+    if (!astar_only_)
+    {
+        visualization_->displayInitPathList(point_set, 0.2, 0);
+    }
     visualization_->displayAStarList(a_star_pathes, vis_id);
 
     t_start = ros::Time::now();
