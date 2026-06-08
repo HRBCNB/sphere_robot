@@ -31,6 +31,7 @@ void BsplineOptimizer::setControlPoints(const Eigen::MatrixXd& points)
     {
         cps_.resize(points.cols());
     }
+    cps_.clearance = dist0_;
     cps_.points = points;
 }
 

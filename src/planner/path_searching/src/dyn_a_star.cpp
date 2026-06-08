@@ -43,6 +43,7 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("a_star/line_deviation_weight", line_dev_weight_, 2.0);
     nh.param("a_star/max_line_deviation", max_line_deviation_, -1.0);
     nh.param("a_star/use_inflate_for_jump", use_inflate_for_jump_, false);
+    nh.param("a_star/jump_from_inflated", jump_from_inflated_, true);
 
     nh.param("planner/max_jump_h", max_jump_h_, max_jump_h_);
     nh.param("planner/max_jump_d", max_jump_d_, max_jump_d_);
@@ -50,6 +51,11 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("planner/line_deviation_weight", line_dev_weight_, line_dev_weight_);
     nh.param("planner/max_line_deviation", max_line_deviation_, max_line_deviation_);
     nh.param("planner/use_inflate_for_jump", use_inflate_for_jump_, use_inflate_for_jump_);
+    nh.param("planner/jump_from_inflated", jump_from_inflated_, jump_from_inflated_);
+
+    ROS_INFO("[AStar] jump params: h=%.2f, d=%.2f, penalty=%.2f, corridor=%.2f, jump_from_inflated=%s, use_inflate_for_jump=%s",
+             max_jump_h_, max_jump_d_, jump_penalty_, max_line_deviation_, jump_from_inflated_ ? "true" : "false",
+             use_inflate_for_jump_ ? "true" : "false");
 }
 
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
@@ -282,8 +288,8 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 if (checkOccupancy(neighbor_pos))
                 {
                     ++occupied_neighbor_count;
-                    // Inflated-only cells are safety margins. Roll around them; do not jump from the obstacle edge.
-                    if (!checkRawOccupancy(neighbor_pos))
+                    // In simulation and test walls, low obstacles may only be present in the inflated buffer.
+                    if (!jump_from_inflated_ && !checkRawOccupancy(neighbor_pos))
                     {
                         continue;
                     }

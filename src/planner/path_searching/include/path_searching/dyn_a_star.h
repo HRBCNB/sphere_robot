@@ -110,6 +110,7 @@ class AStar
     double line_dev_weight_;     // Cost weight for deviation from the start-goal line
     double max_line_deviation_;  // Hard corridor limit from the start-goal line, disabled when <= 0
     bool use_inflate_for_jump_;
+    bool jump_from_inflated_;
     int jump_fail_map_{0};
     int jump_fail_landing_occ_{0};
     int jump_fail_range_{0};
