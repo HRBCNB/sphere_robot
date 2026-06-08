@@ -41,11 +41,15 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("a_star/max_jump_d", max_jump_d_, 1.5);
     nh.param("a_star/jump_penalty", jump_penalty_, 5.0);
     nh.param("a_star/line_deviation_weight", line_dev_weight_, 2.0);
+    nh.param("a_star/max_line_deviation", max_line_deviation_, -1.0);
+    nh.param("a_star/use_inflate_for_jump", use_inflate_for_jump_, false);
 
     nh.param("planner/max_jump_h", max_jump_h_, max_jump_h_);
     nh.param("planner/max_jump_d", max_jump_d_, max_jump_d_);
     nh.param("planner/jump_penalty", jump_penalty_, jump_penalty_);
     nh.param("planner/line_deviation_weight", line_dev_weight_, line_dev_weight_);
+    nh.param("planner/max_line_deviation", max_line_deviation_, max_line_deviation_);
+    nh.param("planner/use_inflate_for_jump", use_inflate_for_jump_, use_inflate_for_jump_);
 }
 
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
@@ -158,15 +162,33 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     const Eigen::Vector2d line_end = end_pt.head<2>();
     const Eigen::Vector2d line_vec = line_end - line_start;
     const double line_len = line_vec.norm();
-    auto lineDeviationCost = [&](const Eigen::Vector3d& pos) {
-        if (line_dev_weight_ <= 1e-6 || line_len < 1e-6)
+    auto lineDeviation = [&](const Eigen::Vector3d& pos) {
+        if (line_len < 1e-6)
         {
             return 0.0;
         }
         const Eigen::Vector2d rel = pos.head<2>() - line_start;
         const double cross = fabs(line_vec.x() * rel.y() - line_vec.y() * rel.x());
-        return line_dev_weight_ * cross / line_len;
+        return cross / line_len;
     };
+    auto lineDeviationCost = [&](const Eigen::Vector3d& pos) {
+        if (line_dev_weight_ <= 1e-6)
+        {
+            return 0.0;
+        }
+        const double deviation = lineDeviation(pos);
+        return line_dev_weight_ * deviation * deviation;
+    };
+    auto insideLineCorridor = [&](const Eigen::Vector3d& pos) {
+        if (max_line_deviation_ <= 1e-6)
+        {
+            return true;
+        }
+        return lineDeviation(pos) <= max_line_deviation_;
+    };
+    const Eigen::Vector3d preferred_jump_dir =
+        line_len > 1e-6 ? Eigen::Vector3d(line_vec.x() / line_len, line_vec.y() / line_len, 0.0)
+                         : Eigen::Vector3d::Zero();
 
     std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, NodeComparator> empty;
     openSet_.swap(empty);
@@ -192,6 +214,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     int occupied_neighbor_count = 0;
     int jump_candidate_count = 0;
     int feasible_jump_count = 0;
+    jump_fail_map_ = 0;
+    jump_fail_landing_occ_ = 0;
+    jump_fail_range_ = 0;
+    jump_fail_peak_map_ = 0;
+    jump_fail_arc_map_ = 0;
+    jump_fail_arc_occ_ = 0;
     while (!openSet_.empty())
     {
         num_iter++;
@@ -235,6 +263,11 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 // 获取邻居节点指针
                 neighborPtr = GridNodeMap_[neighborIdx(0)][neighborIdx(1)][neighborIdx(2)];
                 neighborPtr->index = neighborIdx;
+                const Vector3d neighbor_pos = Index2Coord(neighborIdx);
+                if (!insideLineCorridor(neighbor_pos))
+                {
+                    continue;
+                }
                 // 判断邻居节点是否已经被探索过，如果已经被探索过且在闭集里，则跳过
                 bool flag_explored = neighborPtr->rounds == rounds_;
 
@@ -249,8 +282,10 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 if (checkOccupancy(Index2Coord(neighborPtr->index)))
                 {
                     ++occupied_neighbor_count;
-                    // 定义跳跃搜索方向
-                    Vector3d jump_dir = Vector3d(double(dx), double(dy), 0.0).normalized();
+                    // Prefer jumping along the start-goal line, so a frontal low obstacle is crossed straight.
+                    Vector3d jump_dir = preferred_jump_dir.norm() > 1e-6
+                                            ? preferred_jump_dir
+                                            : Vector3d(double(dx), double(dy), 0.0).normalized();
                     Vector3d start_pos = Index2Coord(current->index);
 
                     // 在最大跳跃跨度内搜索落脚点
@@ -268,6 +303,10 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                             if (!Coord2IndexNoWarn(landing_pos, landing_idx))
                             {
                                 // 落点在当前 A* 局部搜索池外，跳过这个候选。
+                                continue;
+                            }
+                            if (!insideLineCorridor(landing_pos))
+                            {
                                 continue;
                             }
                             GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
@@ -306,7 +345,7 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 {
                     // 代价
                     double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
-                    tentative_gScore = current->gScore + static_cost + lineDeviationCost(Index2Coord(neighborIdx));
+                    tentative_gScore = current->gScore + static_cost + lineDeviationCost(neighbor_pos);
 
                     if (!flag_explored)  // 没有拓展过，加入open set
                     {
@@ -333,6 +372,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         {
             ROS_WARN("Failed in A star path searching !!! 0.2 seconds time limit exceeded. iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d",
                      num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count);
+            ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
+                     jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
+                     jump_fail_arc_occ_);
             return false;
         }
     }
@@ -341,6 +383,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
 
     ROS_WARN("A star failed: iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d, time=%.3fs",
              num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count, (time_2 - time_1).toSec());
+    ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
+             jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
+             jump_fail_arc_occ_);
 
     return false;
 }  // end AstarSearch
@@ -396,11 +441,13 @@ bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_po
 {
     if (!grid_map_->isInMap(start_pos) || !grid_map_->isInMap(landing_pos))
     {
+        ++jump_fail_map_;
         return false;
     }
 
     if (checkOccupancy(landing_pos))
     {
+        ++jump_fail_landing_occ_;
         return false;
     }
 
@@ -414,6 +461,7 @@ bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_po
     double end_z = landing_pos.z();
     if (horizontal_dist < 1e-3 || horizontal_dist > max_jump_d_ || fabs(end_z - start_z) > max_jump_h_)
     {
+        ++jump_fail_range_;
         return false;
     }
 
@@ -430,6 +478,7 @@ bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_po
     if (!grid_map_->isInMap(Vector3d((start_pos.x() + landing_pos.x()) * 0.5,
                                      (start_pos.y() + landing_pos.y()) * 0.5, peak_h)))
     {
+        ++jump_fail_peak_map_;
         return false;
     }
 
@@ -449,12 +498,14 @@ bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_po
         // 检查路径点是否在地图范围内
         if (!grid_map_->isInMap(check_pos))
         {
+            ++jump_fail_arc_map_;
             return false;  // 如果路径点超出地图范围，则认为不可行
         }
 
         // 如果该点在障碍物中，且高度低于跳跃轨迹的高度，则认为碰撞
-        if (checkOccupancy(check_pos))
+        if (checkJumpOccupancy(check_pos))
         {
+            ++jump_fail_arc_occ_;
             return false;  // 轨迹与障碍物碰撞
         }
     }

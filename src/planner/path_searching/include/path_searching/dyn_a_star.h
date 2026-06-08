@@ -86,6 +86,11 @@ class AStar
         return (bool)grid_map_->getInflateOccupancy(pos);
     }
 
+    inline bool checkJumpOccupancy(const Eigen::Vector3d& pos)
+    {
+        return use_inflate_for_jump_ ? (bool)grid_map_->getInflateOccupancy(pos) : (bool)grid_map_->getOccupancy(pos);
+    }
+
     std::vector<GridNodePtr> retrievePath(GridNodePtr current);
 
     double step_size_, inv_step_size_;
@@ -98,6 +103,14 @@ class AStar
     double max_jump_d_;          // Maximum jump distance (m)
     double jump_penalty_;        // Extra cost for jumping
     double line_dev_weight_;     // Cost weight for deviation from the start-goal line
+    double max_line_deviation_;  // Hard corridor limit from the start-goal line, disabled when <= 0
+    bool use_inflate_for_jump_;
+    int jump_fail_map_{0};
+    int jump_fail_landing_occ_{0};
+    int jump_fail_range_{0};
+    int jump_fail_peak_map_{0};
+    int jump_fail_arc_map_{0};
+    int jump_fail_arc_occ_{0};
 
     std::vector<GridNodePtr> gridPath_;
 

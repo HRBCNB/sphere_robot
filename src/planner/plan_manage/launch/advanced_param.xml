@@ -113,6 +113,8 @@
     <param name="planner/max_jump_d" value="1.5" type="double"/>
     <param name="planner/jump_penalty" value="5.0" type="double"/>
     <param name="planner/line_deviation_weight" value="2.0" type="double"/>
+    <param name="planner/max_line_deviation" value="-1.0" type="double"/>
+    <param name="planner/use_inflate_for_jump" value="false" type="bool"/>
 
   <!-- planner manager -->
     <param name="manager/max_vel" value="$(arg max_vel)" type="double"/>

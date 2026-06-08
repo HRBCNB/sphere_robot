@@ -56,6 +56,8 @@
   <param name="/ego_planner_node/manager/astar_wall_thickness" value="0.4" type="double"/>
   <param name="/ego_planner_node/manager/astar_wall_y_half_width" value="9.0" type="double"/>
   <param name="/ego_planner_node/manager/astar_wall_height" value="0.35" type="double"/>
+  <param name="/ego_planner_node/planner/max_line_deviation" value="0.15" type="double"/>
+  <param name="/ego_planner_node/planner/use_inflate_for_jump" value="false" type="bool"/>
 
   <group unless="$(arg astar_only)">
     <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
