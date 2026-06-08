@@ -23,8 +23,9 @@ class ControlPoints
    public:
     TRAJ_MODE mode{ROLL};
     double clearance;
-    int size;
+    int size{0};
     Eigen::MatrixXd points;  // control points, 3 x N
+    std::vector<TRAJ_MODE> point_modes;
     std::vector<std::vector<Eigen::Vector3d>>
         base_point;  // The point at the statrt of the direction vector (collision point)
     std::vector<std::vector<Eigen::Vector3d>> direction;  // Direction vector, must be normalized.
@@ -39,12 +40,14 @@ class ControlPoints
         base_point.clear();
         direction.clear();
         flag_temp.clear();
+        point_modes.clear();
         // occupancy.clear();
 
         points.resize(3, size_set);
         base_point.resize(size);
         direction.resize(size);
         flag_temp.resize(size);
+        point_modes.resize(size, ROLL);
         // occupancy.resize(size);
     }
 };
@@ -69,6 +72,7 @@ class BsplineOptimizer
 
     // required inputs
     void setControlPoints(const Eigen::MatrixXd& points);
+    void setControlPointModes(const std::vector<TRAJ_MODE>& modes);
     void setBsplineInterval(const double& ts);
     void setCostFunction(const int& cost_function);
     void setTerminateCond(const int& max_num_id, const int& max_time_id);
@@ -148,6 +152,7 @@ class BsplineOptimizer
     // q contains all control points
     void calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE traj_mode, double& cost, Eigen::MatrixXd& gradient,
                             bool falg_use_jerk = true);
+    bool isRollSpan(const int start_id, const int span) const;
     void calcFeasibilityCost(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient);
     void calcDistanceCostRebound(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient, int iter_num,
                                  double smoothness_cost);

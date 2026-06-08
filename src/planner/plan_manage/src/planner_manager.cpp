@@ -1,6 +1,8 @@
 // #include <fstream>
 #include <plan_manage/planner_manager.h>
 
+#include <algorithm>
+#include <cmath>
 #include <thread>
 
 namespace ego_planner
@@ -204,6 +206,8 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     : pp_.ctrl_pt_dist / pp_.max_vel_ *
                           5;  // pp_.ctrl_pt_dist / pp_.max_vel_ is too tense, and will surely exceed the acc/vel limits
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
+    vector<TRAJ_MODE> point_modes;
+    vector<vector<PathNode>> init_a_star_pathes;
     static bool flag_first_call = true, flag_force_polynomial = false;
     bool flag_regenerate = false;
     do  // 采样pointset
@@ -378,6 +382,81 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         }
     } while (flag_regenerate);
 
+    {
+        Eigen::Vector3d astar_start = start_pt;
+        Eigen::Vector3d astar_goal = local_target_pt;
+        astar_start.z() = astar_height_;
+        astar_goal.z() = astar_height_;
+
+        if (bspline_optimizer_rebound_->a_star_->AstarSearch(0.1, astar_start, astar_goal))
+        {
+            const vector<PathNode> raw_path = bspline_optimizer_rebound_->a_star_->getPath();
+            vector<PathNode> dense_path;
+            const double max_step = std::max(0.05, pp_.ctrl_pt_dist);
+
+            for (size_t i = 0; i < raw_path.size(); ++i)
+            {
+                if (i == 0)
+                {
+                    dense_path.push_back(raw_path[i]);
+                    continue;
+                }
+
+                const Eigen::Vector3d last_pos = raw_path[i - 1].pos;
+                const Eigen::Vector3d cur_pos = raw_path[i].pos;
+                const double dist = (cur_pos - last_pos).norm();
+                const int sample_num = std::max(1, static_cast<int>(std::ceil(dist / max_step)));
+                const TRAJ_MODE seg_mode =
+                    (raw_path[i - 1].mode == JUMP || raw_path[i].mode == JUMP) ? JUMP : raw_path[i].mode;
+
+                for (int sample = 1; sample <= sample_num; ++sample)
+                {
+                    const double ratio = static_cast<double>(sample) / sample_num;
+                    PathNode node;
+                    node.pos = last_pos * (1.0 - ratio) + cur_pos * ratio;
+                    node.mode = seg_mode;
+                    dense_path.push_back(node);
+                }
+            }
+
+            if (dense_path.size() >= 7)
+            {
+                point_set.clear();
+                point_modes.clear();
+                start_end_derivatives.clear();
+                point_set.reserve(dense_path.size());
+                point_modes.reserve(dense_path.size());
+
+                for (const auto& node : dense_path)
+                {
+                    point_set.push_back(node.pos);
+                    point_modes.push_back(node.mode);
+                }
+
+                start_end_derivatives.push_back(start_vel);
+                start_end_derivatives.push_back(local_target_vel);
+                start_end_derivatives.push_back(start_acc);
+                start_end_derivatives.push_back(Eigen::Vector3d::Zero());
+                init_a_star_pathes.push_back(dense_path);
+
+                const bool has_jump = std::any_of(point_modes.begin(), point_modes.end(), [](const TRAJ_MODE mode) {
+                    return mode == JUMP;
+                });
+                ROS_INFO("[EGOPlannerManager] use direct A* init path: points=%zu, mode=%s", point_set.size(),
+                         has_jump ? "JUMP" : "ROLL");
+            }
+            else
+            {
+                ROS_WARN("[EGOPlannerManager] direct A* init path has too few points (%zu), keep polynomial init.",
+                         dense_path.size());
+            }
+        }
+        else
+        {
+            ROS_WARN("[EGOPlannerManager] direct A* init failed, keep polynomial init.");
+        }
+    }
+
     // 将离散点集和起终点导数参数化为 B 样条控制点control points。
     Eigen::MatrixXd ctrl_pts;
     UniformBspline::parameterizeToBspline(ts, point_set, start_end_derivatives, ctrl_pts);
@@ -385,6 +464,29 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     // 通过Astar来使轨迹无碰撞
     vector<vector<PathNode>> a_star_pathes;
     a_star_pathes = bspline_optimizer_rebound_->initControlPoints(ctrl_pts, true);
+
+    if (!point_modes.empty() && point_modes.size() >= 2)
+    {
+        vector<TRAJ_MODE> ctrl_point_modes(ctrl_pts.cols(), ROLL);
+        const double denom = static_cast<double>(point_modes.size() - 1);
+        const int ctrl_last = static_cast<int>(ctrl_pts.cols()) - 1;
+
+        for (size_t i = 0; i < point_modes.size(); ++i)
+        {
+            if (point_modes[i] != JUMP) continue;
+
+            const int ctrl_id = static_cast<int>(std::round(static_cast<double>(i) / denom * ctrl_last));
+            for (int offset = -1; offset <= 1; ++offset)
+            {
+                const int id = ctrl_id + offset;
+                if (id >= 0 && id <= ctrl_last)
+                {
+                    ctrl_point_modes[id] = JUMP;
+                }
+            }
+        }
+        bspline_optimizer_rebound_->setControlPointModes(ctrl_point_modes);
+    }
 
     // 记录初始化阶段耗时，并显示初始路径和 A* 路径。
     t_init = ros::Time::now() - t_start;
@@ -394,7 +496,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     {
         visualization_->displayInitPathList(point_set, 0.2, 0);
     }
-    visualization_->displayAStarList(a_star_pathes, vis_id);
+    visualization_->displayAStarList(init_a_star_pathes.empty() ? a_star_pathes : init_a_star_pathes, vis_id);
 
     t_start = ros::Time::now();
 

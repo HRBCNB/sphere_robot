@@ -27,7 +27,23 @@ void BsplineOptimizer::setEnvironment(const GridMap::Ptr& env)
 
 void BsplineOptimizer::setControlPoints(const Eigen::MatrixXd& points)
 {
+    if (cps_.size != points.cols())
+    {
+        cps_.resize(points.cols());
+    }
     cps_.points = points;
+}
+
+void BsplineOptimizer::setControlPointModes(const std::vector<TRAJ_MODE>& modes)
+{
+    if (modes.size() != static_cast<size_t>(cps_.points.cols()))
+    {
+        ROS_WARN("[BsplineOptimizer] ignore control point modes: modes=%zu, cps=%ld", modes.size(), cps_.points.cols());
+        return;
+    }
+
+    cps_.point_modes = modes;
+    cps_.mode = std::find(modes.begin(), modes.end(), JUMP) == modes.end() ? ROLL : JUMP;
 }
 
 void BsplineOptimizer::setBsplineInterval(const double& ts)
@@ -155,6 +171,20 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
     cps_.mode = has_jump_segment ? JUMP : ROLL;
     ROS_INFO("[BsplineOptimizer] init A* segments: %zu, jump segments: %d, traj mode: %s", a_star_pathes.size(),
              jump_segment_num, cps_.mode == JUMP ? "JUMP" : "ROLL");
+
+    std::fill(cps_.point_modes.begin(), cps_.point_modes.end(), ROLL);
+    for (size_t i = 0; i < segment_ids.size() && i < a_star_pathes.size(); ++i)
+    {
+        const bool segment_has_jump = std::any_of(a_star_pathes[i].begin(), a_star_pathes[i].end(), [](const PathNode& node) {
+            return node.mode == JUMP;
+        });
+        if (!segment_has_jump) continue;
+
+        for (int j = segment_ids[i].first; j <= segment_ids[i].second && j < cps_.size; ++j)
+        {
+            cps_.point_modes[j] = JUMP;
+        }
+    }
 
     /*** calculate bounds ***/
     // 计算每段可扩展边界 bounds
@@ -481,6 +511,23 @@ void BsplineOptimizer::calcFitnessCost(const Eigen::MatrixXd& q, double& cost, E
     }
 }
 
+bool BsplineOptimizer::isRollSpan(const int start_id, const int span) const
+{
+    if (cps_.point_modes.size() != static_cast<size_t>(cps_.points.cols()))
+    {
+        return cps_.mode == ROLL;
+    }
+
+    for (int i = start_id; i < start_id + span && i < static_cast<int>(cps_.point_modes.size()); ++i)
+    {
+        if (cps_.point_modes[i] == JUMP)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * @brief 计算平滑性代价和梯度·
  * @param q 控制点矩阵，3 x N
@@ -501,9 +548,9 @@ void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE tr
         {
             /* evaluate jerk */
             jerk = q.col(i + 3) - 3 * q.col(i + 2) + 3 * q.col(i + 1) - q.col(i);
-            if (traj_mode == ROLL)
+            if (isRollSpan(i, 4))
             {
-                jerk(2) = 0.0;  // 不考虑z轴
+                jerk(2) = 0.0;  // ROLL段不考虑z轴
             }
             cost += jerk.squaredNorm();
             // cost对jerk的导数
@@ -523,9 +570,9 @@ void BsplineOptimizer::calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE tr
         {
             /* evaluate acc */
             acc = q.col(i + 2) - 2 * q.col(i + 1) + q.col(i);
-            if (traj_mode == ROLL)
+            if (isRollSpan(i, 3))
             {
-                acc(2) = 0.0;  // 不考虑z轴
+                acc(2) = 0.0;  // ROLL段不考虑z轴
             }
             cost += acc.squaredNorm();
             temp_acc = 2.0 * acc;
@@ -850,6 +897,20 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
         cps_.mode = has_jump_segment ? JUMP : ROLL;
         ROS_INFO("[BsplineOptimizer] rebound A* segments: %zu, jump segments: %d, traj mode: %s", a_star_pathes.size(),
                  jump_segment_num, cps_.mode == JUMP ? "JUMP" : "ROLL");
+
+        std::fill(cps_.point_modes.begin(), cps_.point_modes.end(), ROLL);
+        for (size_t i = 0; i < segment_ids.size() && i < a_star_pathes.size(); ++i)
+        {
+            const bool segment_has_jump = std::any_of(a_star_pathes[i].begin(), a_star_pathes[i].end(), [](const PathNode& node) {
+                return node.mode == JUMP;
+            });
+            if (!segment_has_jump) continue;
+
+            for (int j = segment_ids[i].first; j <= segment_ids[i].second && j < cps_.size; ++j)
+            {
+                cps_.point_modes[j] = JUMP;
+            }
+        }
 
         /*** Assign parameters to each segment ***/
         for (size_t i = 0; i < segment_ids.size(); ++i)
