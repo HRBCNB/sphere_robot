@@ -279,9 +279,14 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 neighborPtr->rounds = rounds_;
 
                 // 检测到邻居节点在障碍物中
-                if (checkOccupancy(Index2Coord(neighborPtr->index)))
+                if (checkOccupancy(neighbor_pos))
                 {
                     ++occupied_neighbor_count;
+                    // Inflated-only cells are safety margins. Roll around them; do not jump from the obstacle edge.
+                    if (!checkRawOccupancy(neighbor_pos))
+                    {
+                        continue;
+                    }
                     // Prefer jumping along the start-goal line, so a frontal low obstacle is crossed straight.
                     Vector3d jump_dir = preferred_jump_dir.norm() > 1e-6
                                             ? preferred_jump_dir

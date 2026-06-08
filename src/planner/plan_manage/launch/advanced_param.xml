@@ -125,6 +125,7 @@
     <param name="manager/planning_horizon" value="$(arg planning_horizon)" type="double"/>
     <param name="manager/astar_only" value="$(arg astar_only)" type="bool"/>
     <param name="manager/astar_test_wall" value="false" type="bool"/>
+    <param name="manager/astar_test_scene" value="single" type="str"/>
     <param name="manager/astar_height" value="0.25" type="double"/>
     <param name="manager/astar_wall_x" value="-13.5" type="double"/>
     <param name="manager/astar_wall_thickness" value="0.4" type="double"/>

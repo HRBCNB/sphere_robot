@@ -325,7 +325,7 @@ inline void GridMap::setOccupancy(Eigen::Vector3d pos, double occ)
     Eigen::Vector3i id;
     posToIndex(pos, id);
 
-    md_.occupancy_buffer_[toAddress(id)] = occ;
+    md_.occupancy_buffer_[toAddress(id)] = occ > 0.5 ? mp_.clamp_max_log_ : mp_.clamp_min_log_;
 }
 
 inline int GridMap::getOccupancy(Eigen::Vector3d pos)

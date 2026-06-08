@@ -29,6 +29,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/planning_horizon", pp_.planning_horizen_, 5.0);
     nh.param("manager/astar_only", astar_only_, false);
     nh.param("manager/astar_test_wall", astar_test_wall_, false);
+    nh.param("manager/astar_test_scene", astar_test_scene_, std::string("single"));
     nh.param("manager/astar_height", astar_height_, 0.25);
     nh.param("manager/astar_wall_x", astar_wall_x_, -13.5);
     nh.param("manager/astar_wall_thickness", astar_wall_thickness_, 0.4);
@@ -83,19 +84,54 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         {
             const double res = 0.1;
             int occupied_points = 0;
-            for (double x = astar_wall_x_ - astar_wall_thickness_ * 0.5; x <= astar_wall_x_ + astar_wall_thickness_ * 0.5 + 1e-6; x += res)
-            {
-                for (double y = -astar_wall_y_half_width_; y <= astar_wall_y_half_width_ + 1e-6; y += res)
+            auto add_box = [&](double x_min, double x_max, double y_min, double y_max, double z_min, double z_max) {
+                for (double x = x_min; x <= x_max + 1e-6; x += res)
                 {
-                    for (double z = 0.0; z <= astar_wall_height_ + 1e-6; z += res)
+                    for (double y = y_min; y <= y_max + 1e-6; y += res)
                     {
-                        grid_map_->setOccupied(Eigen::Vector3d(x, y, z));
-                        ++occupied_points;
+                        for (double z = z_min; z <= z_max + 1e-6; z += res)
+                        {
+                            const Eigen::Vector3d pos(x, y, z);
+                            grid_map_->setOccupied(pos);
+                            grid_map_->setOccupancy(pos, 1.0);
+                            ++occupied_points;
+                        }
                     }
                 }
+            };
+
+            if (astar_test_scene_ == "complex")
+            {
+                add_box(-15.8, -15.4, -0.85, 0.25, 0.0, 0.30);
+                add_box(-14.2, -13.8, -0.20, 0.95, 0.0, 0.35);
+                add_box(-12.6, -12.2, -0.95, 0.15, 0.0, 0.30);
+                add_box(-13.4, -13.0, 1.40, 2.20, 0.0, 0.45);
+                add_box(-11.7, -11.3, -1.80, -1.05, 0.0, 0.45);
+                ROS_WARN("[EGOPlannerManager] astar_only inserted complex test obstacles, voxels=%d", occupied_points);
             }
-            ROS_WARN("[EGOPlannerManager] astar_only inserted test wall into occupancy: x=%.2f, y=[%.2f, %.2f], h=%.2f, voxels=%d",
-                     astar_wall_x_, -astar_wall_y_half_width_, astar_wall_y_half_width_, astar_wall_height_, occupied_points);
+            else if (astar_test_scene_ == "bend")
+            {
+                add_box(-16.0, -15.6, -0.45, 0.55, 0.0, 0.30);
+                add_box(-14.45, -13.85, -0.45, 0.25, 0.0, 1.10);
+                add_box(-12.6, -12.2, -0.15, 0.85, 0.0, 0.30);
+                add_box(-13.5, -12.8, 1.35, 2.20, 0.0, 0.45);
+                add_box(-11.8, -11.2, -1.80, -1.10, 0.0, 0.45);
+                ROS_WARN("[EGOPlannerManager] astar_only inserted bend test obstacles, voxels=%d", occupied_points);
+            }
+            else if (astar_test_scene_ == "detour")
+            {
+                add_box(-16.8, -16.4, -0.45, 0.45, 0.0, 0.30);
+                add_box(-14.7, -13.3, -0.65, 0.65, 0.0, 1.25);
+                add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
+                ROS_WARN("[EGOPlannerManager] astar_only inserted detour test obstacles, voxels=%d", occupied_points);
+            }
+            else
+            {
+                add_box(astar_wall_x_ - astar_wall_thickness_ * 0.5, astar_wall_x_ + astar_wall_thickness_ * 0.5,
+                        -astar_wall_y_half_width_, astar_wall_y_half_width_, 0.0, astar_wall_height_);
+                ROS_WARN("[EGOPlannerManager] astar_only inserted test wall into occupancy: x=%.2f, y=[%.2f, %.2f], h=%.2f, voxels=%d",
+                         astar_wall_x_, -astar_wall_y_half_width_, astar_wall_y_half_width_, astar_wall_height_, occupied_points);
+            }
         }
 
         vector<vector<PathNode>> a_star_pathes;

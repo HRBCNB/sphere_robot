@@ -86,6 +86,11 @@ class AStar
         return (bool)grid_map_->getInflateOccupancy(pos);
     }
 
+    inline bool checkRawOccupancy(const Eigen::Vector3d& pos)
+    {
+        return (bool)grid_map_->getOccupancy(pos);
+    }
+
     inline bool checkJumpOccupancy(const Eigen::Vector3d& pos)
     {
         return use_inflate_for_jump_ ? (bool)grid_map_->getInflateOccupancy(pos) : (bool)grid_map_->getOccupancy(pos);

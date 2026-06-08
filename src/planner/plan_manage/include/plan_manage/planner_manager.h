@@ -7,6 +7,7 @@
 #include <plan_env/grid_map.h>
 #include <ros/ros.h>
 #include <stdlib.h>
+#include <string>
 #include <traj_utils/planning_visualization.h>
 
 #include <plan_manage/plan_container.hpp>
@@ -54,6 +55,7 @@ class EGOPlannerManager
     int continous_failures_count_{0};
     bool astar_only_{false};
     bool astar_test_wall_{false};
+    std::string astar_test_scene_{"single"};
     double astar_height_{0.25};
     double astar_wall_x_{-13.5};
     double astar_wall_thickness_{0.4};

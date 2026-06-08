@@ -51,13 +51,9 @@
   </include>
 
   <param name="/ego_planner_node/manager/astar_test_wall" value="true" type="bool"/>
-  <param name="/ego_planner_node/manager/astar_test_scene" value="single" type="str"/>
+  <param name="/ego_planner_node/manager/astar_test_scene" value="bend" type="str"/>
   <param name="/ego_planner_node/manager/astar_height" value="0.25" type="double"/>
-  <param name="/ego_planner_node/manager/astar_wall_x" value="-13.5" type="double"/>
-  <param name="/ego_planner_node/manager/astar_wall_thickness" value="0.4" type="double"/>
-  <param name="/ego_planner_node/manager/astar_wall_y_half_width" value="9.0" type="double"/>
-  <param name="/ego_planner_node/manager/astar_wall_height" value="0.35" type="double"/>
-  <param name="/ego_planner_node/planner/max_line_deviation" value="0.15" type="double"/>
+  <param name="/ego_planner_node/planner/max_line_deviation" value="1.0" type="double"/>
   <param name="/ego_planner_node/planner/use_inflate_for_jump" value="false" type="bool"/>
 
   <group unless="$(arg astar_only)">
@@ -81,8 +77,8 @@
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
     <arg name="use_control" value="$(arg use_control)"/>
+    <arg name="obstacle_scenario" value="bend"/>
   </include>
-
 
   <group if="$(arg auto_goal)">
     <node pkg="ego_planner" name="publish_fixed_goal" type="publish_fixed_goal.py" output="screen">

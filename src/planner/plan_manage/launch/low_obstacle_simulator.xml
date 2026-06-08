@@ -7,9 +7,11 @@
   <arg name="map_size_z_"/>
   <arg name="odometry_topic"/>
   <arg name="use_control" default="true"/>
+  <arg name="obstacle_scenario" default="single"/>
 
   <node pkg="map_generator" type="low_obstacle_map" name="low_obstacle_map" output="screen">
     <param name="resolution" value="0.1"/>
+    <param name="scenario" value="$(arg obstacle_scenario)"/>
     <param name="wall_x" value="-13.5"/>
     <param name="wall_thickness" value="0.4"/>
     <param name="wall_y_half_width" value="9.0"/>
