@@ -223,14 +223,14 @@ Visualization Manager:
     - Class: rviz/Group
       Displays:
         - Class: rviz/Marker
-          Enabled: true
+          Enabled: false
           Marker Topic: /odom_visualization/robot
           Name: robot
           Namespaces:
-            mesh: true
+            mesh: false
           Queue Size: 100
-          Value: true
-      Enabled: true
+          Value: false
+      Enabled: false
       Name: Simulation
     - Class: rviz/Image
       Enabled: false

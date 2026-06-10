@@ -111,8 +111,10 @@
     <!-- 机器人跳跃参数 -->
     <param name="planner/max_jump_h" value="0.5" type="double"/>
     <param name="planner/max_jump_d" value="1.5" type="double"/>
-    <param name="planner/jump_penalty" value="5.0" type="double"/>
-    <param name="planner/line_deviation_weight" value="2.0" type="double"/>
+    <param name="planner/jump_penalty" value="10.0" type="double"/>
+    <param name="planner/jump_takeoff_clearance" value="0.30" type="double"/>
+    <param name="planner/jump_landing_clearance" value="0.30" type="double"/>
+    <param name="planner/line_deviation_weight" value="0.5" type="double"/>
     <param name="planner/max_line_deviation" value="-1.0" type="double"/>
     <param name="planner/use_inflate_for_jump" value="false" type="bool"/>
 
@@ -126,7 +128,7 @@
     <param name="manager/astar_only" value="$(arg astar_only)" type="bool"/>
     <param name="manager/astar_test_wall" value="false" type="bool"/>
     <param name="manager/astar_test_scene" value="single" type="str"/>
-    <param name="manager/astar_height" value="0.25" type="double"/>
+    <param name="manager/astar_height" value="0.0" type="double"/>
     <param name="manager/astar_wall_x" value="-13.5" type="double"/>
     <param name="manager/astar_wall_thickness" value="0.4" type="double"/>
     <param name="manager/astar_wall_y_half_width" value="9.0" type="double"/>

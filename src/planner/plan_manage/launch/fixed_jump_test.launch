@@ -9,7 +9,7 @@
   <arg name="use_control" default="false"/>
   <arg name="goal_x" default="15.0"/>
   <arg name="goal_y" default="0.0"/>
-  <arg name="goal_z" default="0.25"/>
+  <arg name="goal_z" default="0.0"/>
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -35,7 +35,7 @@
     <arg name="point_num" value="1"/>
     <arg name="point0_x" value="15.0"/>
     <arg name="point0_y" value="0.0"/>
-    <arg name="point0_z" value="0.25"/>
+    <arg name="point0_z" value="0.0"/>
     <arg name="point1_x" value="0.0"/>
     <arg name="point1_y" value="0.0"/>
     <arg name="point1_z" value="1.0"/>
@@ -52,7 +52,7 @@
 
   <param name="/ego_planner_node/manager/astar_test_wall" value="true" type="bool"/>
   <param name="/ego_planner_node/manager/astar_test_scene" value="single" type="str"/>
-  <param name="/ego_planner_node/manager/astar_height" value="0.25" type="double"/>
+  <param name="/ego_planner_node/manager/astar_height" value="0.0" type="double"/>
   <param name="/ego_planner_node/manager/astar_wall_x" value="-13.5" type="double"/>
   <param name="/ego_planner_node/manager/astar_wall_thickness" value="0.4" type="double"/>
   <param name="/ego_planner_node/manager/astar_wall_y_half_width" value="9.0" type="double"/>

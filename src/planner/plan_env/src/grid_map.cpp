@@ -1013,4 +1013,33 @@ double GridMap::getObstacleHeight(const Eigen::Vector3d& pos)
     return found_obstacle ? max_h : 0.0;
 }
 
+double GridMap::getRawObstacleHeight(const Eigen::Vector3d& pos)
+{
+    double res = mp_.resolution_;
+    if (res <= 0.0) return 0.0;
+
+    double max_h = 0.0;
+    bool found_obstacle = false;
+
+    double search_limit = std::min(pos.z() + 1.5, mp_.map_max_boundary_(2) - 1e-4);
+    if (search_limit < pos.z()) return 0.0;
+
+    for (double hz = pos.z(); hz <= search_limit; hz += res)
+    {
+        Eigen::Vector3d scan_pt(pos.x(), pos.y(), hz);
+
+        if (getOccupancy(scan_pt) == 1)
+        {
+            max_h = hz;
+            found_obstacle = true;
+        }
+        else if (found_obstacle)
+        {
+            break;
+        }
+    }
+
+    return found_obstacle ? max_h : 0.0;
+}
+
 // GridMap

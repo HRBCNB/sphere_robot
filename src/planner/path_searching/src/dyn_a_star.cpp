@@ -39,22 +39,45 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
 {
     nh.param("a_star/max_jump_h", max_jump_h_, 0.6);
     nh.param("a_star/max_jump_d", max_jump_d_, 1.5);
-    nh.param("a_star/jump_penalty", jump_penalty_, 5.0);
-    nh.param("a_star/line_deviation_weight", line_dev_weight_, 2.0);
+    nh.param("a_star/jump_penalty", jump_penalty_, 10.0);
+    nh.param("a_star/jump_takeoff_clearance", jump_takeoff_clearance_, 0.30);
+    nh.param("a_star/jump_landing_clearance", jump_landing_clearance_, 0.30);
+    nh.param("a_star/roll_over_height", roll_over_height_, 0.15);
+    nh.param("a_star/roll_over_penalty", roll_over_penalty_, 0.5);
+    nh.param("a_star/min_roll_after_jump", min_roll_after_jump_, 0.8);
+    nh.param("a_star/detour_exit_deviation", detour_exit_deviation_, 0.25);
+    nh.param("a_star/frontal_jump_cos", frontal_jump_cos_, 0.75);
+    nh.param("a_star/jumpable_detour_penalty", jumpable_detour_penalty_, 4.0);
+    nh.param("a_star/line_deviation_weight", line_dev_weight_, 0.5);
     nh.param("a_star/max_line_deviation", max_line_deviation_, -1.0);
+    nh.param("a_star/debug_decisions", debug_decisions_, true);
+    nh.param("a_star/debug_decision_limit", debug_decision_limit_, 80);
     nh.param("a_star/use_inflate_for_jump", use_inflate_for_jump_, false);
     nh.param("a_star/jump_from_inflated", jump_from_inflated_, true);
 
     nh.param("planner/max_jump_h", max_jump_h_, max_jump_h_);
     nh.param("planner/max_jump_d", max_jump_d_, max_jump_d_);
     nh.param("planner/jump_penalty", jump_penalty_, jump_penalty_);
+    nh.param("planner/jump_takeoff_clearance", jump_takeoff_clearance_, jump_takeoff_clearance_);
+    nh.param("planner/jump_landing_clearance", jump_landing_clearance_, jump_landing_clearance_);
+    nh.param("planner/roll_over_height", roll_over_height_, roll_over_height_);
+    nh.param("planner/roll_over_penalty", roll_over_penalty_, roll_over_penalty_);
+    nh.param("planner/min_roll_after_jump", min_roll_after_jump_, min_roll_after_jump_);
+    nh.param("planner/detour_exit_deviation", detour_exit_deviation_, detour_exit_deviation_);
+    nh.param("planner/frontal_jump_cos", frontal_jump_cos_, frontal_jump_cos_);
+    nh.param("planner/jumpable_detour_penalty", jumpable_detour_penalty_, jumpable_detour_penalty_);
     nh.param("planner/line_deviation_weight", line_dev_weight_, line_dev_weight_);
     nh.param("planner/max_line_deviation", max_line_deviation_, max_line_deviation_);
+    nh.param("planner/debug_decisions", debug_decisions_, debug_decisions_);
+    nh.param("planner/debug_decision_limit", debug_decision_limit_, debug_decision_limit_);
     nh.param("planner/use_inflate_for_jump", use_inflate_for_jump_, use_inflate_for_jump_);
     nh.param("planner/jump_from_inflated", jump_from_inflated_, jump_from_inflated_);
 
-    ROS_INFO("[AStar] jump params: h=%.2f, d=%.2f, penalty=%.2f, corridor=%.2f, jump_from_inflated=%s, use_inflate_for_jump=%s",
-             max_jump_h_, max_jump_d_, jump_penalty_, max_line_deviation_, jump_from_inflated_ ? "true" : "false",
+    ROS_INFO("[AStar] jump params: h=%.2f, d=%.2f, penalty=%.2f, takeoff_clear=%.2f, landing_clear=%.2f, roll_h=%.2f, roll_penalty=%.2f, min_roll_after_jump=%.2f, detour_exit=%.2f, frontal_cos=%.2f, jumpable_detour_penalty=%.2f, corridor=%.2f, debug=%s/%d, jump_from_inflated=%s, use_inflate_for_jump=%s",
+             max_jump_h_, max_jump_d_, jump_penalty_, jump_takeoff_clearance_, jump_landing_clearance_,
+             roll_over_height_, roll_over_penalty_, min_roll_after_jump_,
+             detour_exit_deviation_, frontal_jump_cos_, jumpable_detour_penalty_, max_line_deviation_,
+             debug_decisions_ ? "true" : "false", debug_decision_limit_, jump_from_inflated_ ? "true" : "false",
              use_inflate_for_jump_ ? "true" : "false");
 }
 
@@ -192,10 +215,6 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         }
         return lineDeviation(pos) <= max_line_deviation_;
     };
-    const Eigen::Vector3d preferred_jump_dir =
-        line_len > 1e-6 ? Eigen::Vector3d(line_vec.x() / line_len, line_vec.y() / line_len, 0.0)
-                         : Eigen::Vector3d::Zero();
-
     std::priority_queue<GridNodePtr, std::vector<GridNodePtr>, NodeComparator> empty;
     openSet_.swap(empty);
 
@@ -208,11 +227,15 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     startPtr->fScore = getHeu(startPtr, endPtr);
     startPtr->state = GridNode::OPENSET;  // put start node in open set
     startPtr->mode = ego_planner::ROLL;
+    startPtr->dist_since_jump = 1e9;
+    startPtr->detouring = false;
     startPtr->cameFrom = NULL;
     openSet_.push(startPtr);  // put start in open set
 
     endPtr->index = end_idx;
     endPtr->mode = ego_planner::ROLL;
+    endPtr->dist_since_jump = 1e9;
+    endPtr->detouring = false;
 
     double tentative_gScore;
 
@@ -220,6 +243,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
     int occupied_neighbor_count = 0;
     int jump_candidate_count = 0;
     int feasible_jump_count = 0;
+    int roll_node_count = 0;
+    int roll_over_node_count = 0;
+    int jump_node_count = 0;
+    int detour_required_count = 0;
+    int jump_preferred_count = 0;
+    int debug_decision_count = 0;
     jump_fail_map_ = 0;
     jump_fail_landing_occ_ = 0;
     jump_fail_range_ = 0;
@@ -244,9 +273,232 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
             // if((time_2 - time_1).toSec() > 0.1)
             //     ROS_WARN("Time consume in A star path finding is %f", (time_2 - time_1).toSec() );
             gridPath_ = retrievePath(current);
+            ROS_INFO("[AStar] success: iter=%d, path_nodes=%zu, occ_neighbors=%d, roll_nodes=%d, roll_over_nodes=%d, jump_nodes=%d, detour_required=%d, jump_preferred=%d, jump_candidates=%d, feasible_jumps=%d",
+                     num_iter, gridPath_.size(), occupied_neighbor_count, roll_node_count, roll_over_node_count,
+                     jump_node_count, detour_required_count, jump_preferred_count, jump_candidate_count,
+                     feasible_jump_count);
             return true;
         }
         current->state = GridNode::CLOSEDSET;  // move current node from open set to closed set.
+
+        const Eigen::Vector3d current_expand_pos = Index2Coord(current->index);
+        const bool current_detouring = current->detouring && lineDeviation(current_expand_pos) > detour_exit_deviation_;
+
+        auto obstacleHeightForMode = [&](const Eigen::Vector3d& pos) {
+            const double raw_top = grid_map_->getRawObstacleHeight(pos);
+            if (raw_top > 0.0)
+            {
+                return raw_top;
+            }
+
+            // If the cell is occupied only by inflation, use the inflated top for mode classification.
+            // Otherwise a low obstacle's inflated shell looks like raw_top=0 and is incorrectly forced to detour.
+            return grid_map_->getObstacleHeight(pos);
+        };
+
+        auto canRollOver = [&](const Eigen::Vector3d& pos) {
+            const double obstacle_top = obstacleHeightForMode(pos);
+            return obstacle_top > 0.0 && obstacle_top <= pos.z() + roll_over_height_;
+        };
+
+        auto localJumpDir = [&](const int step_x, const int step_y) -> Eigen::Vector3d {
+            Eigen::Vector3d dir(double(step_x), double(step_y), 0.0);
+            if (dir.norm() < 1e-6)
+            {
+                return Eigen::Vector3d::Zero();
+            }
+            return dir.normalized();
+        };
+
+        auto currentGoalDir = [&]() -> Eigen::Vector3d {
+            Eigen::Vector3d dir = Index2Coord(endPtr->index) - current_expand_pos;
+            dir.z() = 0.0;
+            if (dir.norm() < 1e-6)
+            {
+                return Eigen::Vector3d::Zero();
+            }
+            return dir.normalized();
+        };
+
+        auto isFrontalJump = [&](const Eigen::Vector3d& jump_dir) {
+            const Eigen::Vector3d goal_dir = currentGoalDir();
+            return goal_dir.norm() < 1e-6 || jump_dir.dot(goal_dir) >= frontal_jump_cos_;
+        };
+
+        auto isJumpableObstacle = [&](const Eigen::Vector3d& obstacle_pos) {
+            const double obstacle_top = obstacleHeightForMode(obstacle_pos);
+            return obstacle_top > obstacle_pos.z() + roll_over_height_ && obstacle_top <= obstacle_pos.z() + max_jump_h_;
+        };
+
+        auto tryAddNode = [&](GridNodePtr node, const Eigen::Vector3i& idx, const double tentative_g,
+                              const ego_planner::TRAJ_MODE mode, GridNodePtr parent,
+                              const double dist_since_jump, const bool detouring) {
+            const bool explored = node->rounds == rounds_;
+            if (explored && node->state == GridNode::CLOSEDSET)
+            {
+                return false;
+            }
+            if (!explored || tentative_g < node->gScore)
+            {
+                node->rounds = rounds_;
+                node->index = idx;
+                node->state = GridNode::OPENSET;
+                node->cameFrom = parent;
+                node->dist_since_jump = dist_since_jump;
+                node->detouring = detouring;
+                node->gScore = tentative_g;
+                node->fScore = tentative_g + getHeu(node, endPtr);
+                node->mode = mode;
+                openSet_.push(node);
+                return true;
+            }
+            return false;
+        };
+
+        auto canJumpToward = [&](const Eigen::Vector3d& jump_dir, const double min_landing_dist, Eigen::Vector3d* landing_pos_out) {
+            if (current_detouring || current->dist_since_jump < min_roll_after_jump_ || jump_dir.norm() < 1e-6 ||
+                !isFrontalJump(jump_dir))
+            {
+                return false;
+            }
+
+            const double first_landing_dist = std::max(0.5, min_landing_dist);
+            for (double dist = first_landing_dist; dist <= max_jump_d_; dist += step_size_)
+            {
+                Eigen::Vector3d landing_pos = current_expand_pos + jump_dir * dist;
+                ++jump_candidate_count;
+
+                if (!insideLineCorridor(landing_pos))
+                {
+                    continue;
+                }
+                if (!isJumpFeasible(current_expand_pos, landing_pos))
+                {
+                    continue;
+                }
+
+                Eigen::Vector3i landing_idx;
+                if (!Coord2IndexNoWarn(landing_pos, landing_idx))
+                {
+                    continue;
+                }
+                GridNodePtr landing_node = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
+                const bool landing_explored = landing_node->rounds == rounds_;
+                if (landing_explored && landing_node->state == GridNode::CLOSEDSET)
+                {
+                    continue;
+                }
+
+                if (landing_pos_out) *landing_pos_out = landing_pos;
+                ++feasible_jump_count;
+                return true;
+            }
+            return false;
+        };
+
+        auto findJumpTrigger = [&](const Eigen::Vector3d& jump_dir, Eigen::Vector3d* obstacle_pos_out,
+                                   double* obstacle_dist_out) {
+            if (jump_dir.norm() < 1e-6 || !isFrontalJump(jump_dir))
+            {
+                return false;
+            }
+
+            const double lookahead = std::min(max_jump_d_ - jump_landing_clearance_,
+                                              jump_takeoff_clearance_ + 2.0 * step_size_);
+            for (double dist = step_size_; dist <= lookahead + 1e-6; dist += step_size_)
+            {
+                const Eigen::Vector3d scan_pos = current_expand_pos + jump_dir * dist;
+                if (!insideLineCorridor(scan_pos) || !grid_map_->isInMap(scan_pos))
+                {
+                    continue;
+                }
+                if (!checkOccupancy(scan_pos) || canRollOver(scan_pos))
+                {
+                    continue;
+                }
+                if (!isJumpableObstacle(scan_pos))
+                {
+                    return false;
+                }
+                if (!jump_from_inflated_ && !checkRawOccupancy(scan_pos))
+                {
+                    continue;
+                }
+                if (dist + 1e-6 < jump_takeoff_clearance_)
+                {
+                    return false;
+                }
+                if (obstacle_pos_out) *obstacle_pos_out = scan_pos;
+                if (obstacle_dist_out) *obstacle_dist_out = dist;
+                return true;
+            }
+            return false;
+        };
+
+        auto printDecision = [&](const char* tag, const Eigen::Vector3d& neighbor_pos, const int step_x, const int step_y,
+                                const double raw_top, const double inflated_top, const bool roll_possible,
+                                const bool jumpable, const bool frontal, const bool jump_possible,
+                                const double roll_cost, const double jump_cost, const double detour_extra,
+                                const bool detour_required_now) {
+            if (!debug_decisions_ || debug_decision_count >= debug_decision_limit_)
+            {
+                return;
+            }
+            ++debug_decision_count;
+            ROS_INFO("[AStar][decision %d] %s cur=(%.2f %.2f %.2f) nb=(%.2f %.2f %.2f) step=(%d,%d) raw_top=%.2f infl_top=%.2f roll=%s roll_cost=%.2f jumpable=%s frontal=%s jump_possible=%s jump_cost=%.2f detour_extra=%.2f detouring=%s detour_required=%s dist_since_jump=%.2f g=%.2f",
+                     debug_decision_count, tag, current_expand_pos.x(), current_expand_pos.y(), current_expand_pos.z(),
+                     neighbor_pos.x(), neighbor_pos.y(), neighbor_pos.z(), step_x, step_y, raw_top, inflated_top,
+                     roll_possible ? "Y" : "N", roll_cost, jumpable ? "Y" : "N", frontal ? "Y" : "N",
+                     jump_possible ? "Y" : "N", jump_cost, detour_extra, current_detouring ? "Y" : "N",
+                     detour_required_now ? "Y" : "N", current->dist_since_jump, current->gScore);
+        };
+
+        bool detour_required = current_detouring;
+        bool jump_preferred = false;
+        for (int sx = -1; sx <= 1 && !detour_required; ++sx)
+            for (int sy = -1; sy <= 1 && !detour_required; ++sy)
+            {
+                if (sx == 0 && sy == 0) continue;
+
+                Eigen::Vector3i scan_idx;
+                scan_idx(0) = current->index(0) + sx;
+                scan_idx(1) = current->index(1) + sy;
+                scan_idx(2) = current->index(2);
+
+                if (scan_idx(0) < 1 || scan_idx(0) >= POOL_SIZE_(0) - 1 || scan_idx(1) < 1 ||
+                    scan_idx(1) >= POOL_SIZE_(1) - 1 || scan_idx(2) < 1 || scan_idx(2) >= POOL_SIZE_(2) - 1)
+                {
+                    continue;
+                }
+
+                const Eigen::Vector3d scan_pos = Index2Coord(scan_idx);
+                if (!insideLineCorridor(scan_pos) || !checkOccupancy(scan_pos)) continue;
+
+                const Eigen::Vector3d scan_jump_dir = localJumpDir(sx, sy);
+                if (!isFrontalJump(scan_jump_dir)) continue;
+
+                if (canRollOver(scan_pos)) continue;
+                if (!isJumpableObstacle(scan_pos))
+                {
+                    detour_required = true;
+                    ++detour_required_count;
+                    continue;
+                }
+                if (!jump_from_inflated_ && !checkRawOccupancy(scan_pos)) continue;
+
+                Eigen::Vector3d unused_landing;
+                if (canJumpToward(scan_jump_dir, jump_landing_clearance_ + step_size_, &unused_landing))
+                {
+                    jump_preferred = true;
+                }
+                else
+                {
+                    detour_required = true;
+                    ++detour_required_count;
+                }
+            }
+
+        if (jump_preferred) ++jump_preferred_count;
 
         for (int dx = -1; dx <= 1; dx++)
             for (int dy = -1; dy <= 1; dy++)
@@ -255,128 +507,145 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
             {
                 int dz = 0;
                 if (dx == 0 && dy == 0 && dz == 0) continue;
-                // 拓展邻居节点的索引
+
                 Vector3i neighborIdx;
-                neighborIdx(0) = (current->index)(0) + dx;
-                neighborIdx(1) = (current->index)(1) + dy;
-                neighborIdx(2) = (current->index)(2) + dz;
-                // 越界处理
+                neighborIdx(0) = current->index(0) + dx;
+                neighborIdx(1) = current->index(1) + dy;
+                neighborIdx(2) = current->index(2) + dz;
+
                 if (neighborIdx(0) < 1 || neighborIdx(0) >= POOL_SIZE_(0) - 1 || neighborIdx(1) < 1 ||
                     neighborIdx(1) >= POOL_SIZE_(1) - 1 || neighborIdx(2) < 1 || neighborIdx(2) >= POOL_SIZE_(2) - 1)
                 {
                     continue;
                 }
-                // 获取邻居节点指针
+
                 neighborPtr = GridNodeMap_[neighborIdx(0)][neighborIdx(1)][neighborIdx(2)];
-                neighborPtr->index = neighborIdx;
                 const Vector3d neighbor_pos = Index2Coord(neighborIdx);
                 if (!insideLineCorridor(neighbor_pos))
                 {
                     continue;
                 }
-                // 判断邻居节点是否已经被探索过，如果已经被探索过且在闭集里，则跳过
-                bool flag_explored = neighborPtr->rounds == rounds_;
 
-                if (flag_explored && neighborPtr->state == GridNode::CLOSEDSET)
+                const double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
+                const bool next_detouring = detour_required && lineDeviation(neighbor_pos) > detour_exit_deviation_;
+                const double jumpable_detour_cost = jump_preferred ? jumpable_detour_penalty_ : 0.0;
+
+                // 普通 free cell -> ROLL。若前方短距离内有可跳障碍，也在这里提前生成 JUMP successor，
+                // 避免走到障碍边缘才起跳。
+                if (!checkOccupancy(neighbor_pos))
                 {
-                    continue;  // in closed set.
-                }
+                    Eigen::Vector3d trigger_obstacle_pos = Eigen::Vector3d::Zero();
+                    double trigger_obstacle_dist = 0.0;
+                    Eigen::Vector3d early_landing_pos = Eigen::Vector3d::Zero();
+                    bool early_jump_possible = false;
+                    double early_jump_cost = -1.0;
+                    const Eigen::Vector3d early_jump_dir = localJumpDir(dx, dy);
 
-                neighborPtr->rounds = rounds_;
-
-                // 检测到邻居节点在障碍物中
-                if (checkOccupancy(neighbor_pos))
-                {
-                    ++occupied_neighbor_count;
-                    // In simulation and test walls, low obstacles may only be present in the inflated buffer.
-                    if (!jump_from_inflated_ && !checkRawOccupancy(neighbor_pos))
+                    if (!detour_required && findJumpTrigger(early_jump_dir, &trigger_obstacle_pos, &trigger_obstacle_dist))
                     {
-                        continue;
-                    }
-                    // Prefer jumping along the start-goal line, so a frontal low obstacle is crossed straight.
-                    Vector3d jump_dir = preferred_jump_dir.norm() > 1e-6
-                                            ? preferred_jump_dir
-                                            : Vector3d(double(dx), double(dy), 0.0).normalized();
-                    Vector3d start_pos = Index2Coord(current->index);
-
-                    // 在最大跳跃跨度内搜索落脚点
-                    for (double dist = 0.5; dist <= max_jump_d_; dist += step_size_)
-                    {
-                        Vector3d landing_pos = start_pos + jump_dir * dist;
-                        ++jump_candidate_count;
-
-                        if (isJumpFeasible(start_pos, landing_pos))
-                        // TODO：实现isJumpFeasible函数，判断从start_pos跳跃到landing_pos的路径上是否有障碍物
+                        const double min_landing_dist = trigger_obstacle_dist + jump_landing_clearance_;
+                        early_jump_possible = canJumpToward(early_jump_dir, min_landing_dist, &early_landing_pos);
+                        if (early_jump_possible)
                         {
-                            ++feasible_jump_count;
-                            // 落点
-                            Vector3i landing_idx;
-                            if (!Coord2IndexNoWarn(landing_pos, landing_idx))
+                            const double jump_dist = (early_landing_pos - current_expand_pos).norm();
+                            early_jump_cost = jump_dist + jump_penalty_ + lineDeviationCost(early_landing_pos);
+                            Eigen::Vector3i early_landing_idx;
+                            if (Coord2IndexNoWarn(early_landing_pos, early_landing_idx))
                             {
-                                // 落点在当前 A* 局部搜索池外，跳过这个候选。
-                                continue;
+                                GridNodePtr jumpNodePtr = GridNodeMap_[early_landing_idx(0)][early_landing_idx(1)][early_landing_idx(2)];
+                                printDecision("JUMP_EARLY", trigger_obstacle_pos, dx, dy,
+                                              grid_map_->getRawObstacleHeight(trigger_obstacle_pos),
+                                              grid_map_->getObstacleHeight(trigger_obstacle_pos), false, true,
+                                              true, true, static_cost, early_jump_cost, jumpable_detour_cost,
+                                              detour_required);
+                                if (tryAddNode(jumpNodePtr, early_landing_idx, current->gScore + early_jump_cost,
+                                               ego_planner::JUMP, current, 0.0, false))
+                                {
+                                    ++jump_node_count;
+                                }
                             }
-                            if (!insideLineCorridor(landing_pos))
-                            {
-                                continue;
-                            }
-                            GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
-                            jumpNodePtr->index = landing_idx;
-
-                            // 计算跳跃代价：物理距离 + 创新点惩罚
-                            double jump_cost = dist + jump_penalty_ + lineDeviationCost(landing_pos);
-                            double tentative_gScore = current->gScore + jump_cost;
-
-                            bool jump_explored = (jumpNodePtr->rounds == rounds_);
-
-                            // 检查该节点是否已在 ClosedSet 中
-                            if (jump_explored && jumpNodePtr->state == GridNode::CLOSEDSET) continue;
-
-                            // 更新或发现 Jump 节点
-                            if (!jump_explored || tentative_gScore < jumpNodePtr->gScore)
-                            {
-                                jumpNodePtr->rounds = rounds_;
-                                jumpNodePtr->state = GridNode::OPENSET;
-                                jumpNodePtr->cameFrom = current;
-                                jumpNodePtr->gScore = tentative_gScore;
-                                jumpNodePtr->fScore = tentative_gScore + getHeu(jumpNodePtr, endPtr);
-
-                                // 标记为 JUMP 模式，用于 retrievePath 生成拱形轨迹
-                                jumpNodePtr->mode = ego_planner::JUMP;
-                                openSet_.push(jumpNodePtr);
-                            }
-                            // 找到第一个最优落脚点后，跳出当前方向的 dist 循环
-                            break;
                         }
                     }
-                    // 处理完跳跃尝试后，跳过当前这个被占用的 ROLL 邻居
+
+                    tentative_gScore = current->gScore + static_cost + lineDeviationCost(neighbor_pos) +
+                                       jumpable_detour_cost;
+                    if (tryAddNode(neighborPtr, neighborIdx, tentative_gScore, ego_planner::ROLL, current,
+                                   current->dist_since_jump + static_cost * step_size_, next_detouring))
+                    {
+                        ++roll_node_count;
+                    }
                     continue;
+                }
+
+                ++occupied_neighbor_count;
+                const double raw_top = grid_map_->getRawObstacleHeight(neighbor_pos);
+                const double inflated_top = grid_map_->getObstacleHeight(neighbor_pos);
+                const double mode_top = raw_top > 0.0 ? raw_top : inflated_top;
+                const bool roll_possible = mode_top > 0.0 && mode_top <= neighbor_pos.z() + roll_over_height_;
+                const bool jumpable = mode_top > neighbor_pos.z() + roll_over_height_ &&
+                                      mode_top <= neighbor_pos.z() + max_jump_h_;
+                const Eigen::Vector3d jump_dir = localJumpDir(dx, dy);
+                const bool frontal = isFrontalJump(jump_dir);
+                Eigen::Vector3d landing_pos = Eigen::Vector3d::Zero();
+                bool jump_possible = false;
+                double jump_cost = -1.0;
+
+                if (!detour_required && jumpable && (jump_from_inflated_ || checkRawOccupancy(neighbor_pos)))
+                {
+                    jump_possible = canJumpToward(jump_dir, jump_landing_clearance_ + step_size_, &landing_pos);
+                    if (jump_possible)
+                    {
+                        const double jump_dist = (landing_pos - current_expand_pos).norm();
+                        jump_cost = jump_dist + jump_penalty_ + lineDeviationCost(landing_pos);
+                    }
+                }
+
+                const double roll_cost = static_cost + roll_over_penalty_ + lineDeviationCost(neighbor_pos) +
+                                         jumpable_detour_cost;
+
+                // 低障碍可滚越 -> ROLL，增加代价
+                if (roll_possible)
+                {
+                    tentative_gScore = current->gScore + roll_cost;
+                    printDecision("ROLL_OVER", neighbor_pos, dx, dy, raw_top, inflated_top, roll_possible, jumpable,
+                                  frontal, jump_possible, roll_cost, jump_cost, jumpable_detour_cost,
+                                  detour_required);
+                    if (tryAddNode(neighborPtr, neighborIdx, tentative_gScore, ego_planner::ROLL, current,
+                                   current->dist_since_jump + static_cost * step_size_, next_detouring))
+                    {
+                        ++roll_over_node_count;
+                    }
+                    continue;
+                }
+
+                // 低障碍不可滚但可跳 -> JUMP
+                if (jump_possible)
+                {
+                    Eigen::Vector3i landing_idx;
+                    if (Coord2IndexNoWarn(landing_pos, landing_idx))
+                    {
+                        GridNodePtr jumpNodePtr = GridNodeMap_[landing_idx(0)][landing_idx(1)][landing_idx(2)];
+                        const double tentative_jump_g = current->gScore + jump_cost;
+                        printDecision("JUMP_ADD", neighbor_pos, dx, dy, raw_top, inflated_top, roll_possible,
+                                      jumpable, frontal, jump_possible, roll_cost, jump_cost, jumpable_detour_cost,
+                                      detour_required);
+                        if (tryAddNode(jumpNodePtr, landing_idx, tentative_jump_g, ego_planner::JUMP, current,
+                                       0.0, false))
+                        {
+                            ++jump_node_count;
+                        }
+                    }
                 }
                 else
                 {
-                    // 代价
-                    double static_cost = sqrt(dx * dx + dy * dy + dz * dz);
-                    tentative_gScore = current->gScore + static_cost + lineDeviationCost(neighbor_pos);
-
-                    if (!flag_explored)  // 没有拓展过，加入open set
-                    {
-                        // discover a new node
-                        neighborPtr->state = GridNode::OPENSET;
-                        neighborPtr->cameFrom = current;
-                        neighborPtr->gScore = tentative_gScore;
-                        neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
-                        neighborPtr->mode = ego_planner::ROLL;
-                        openSet_.push(neighborPtr);  // put neighbor in open set and record it.
-                    }
-                    else if (tentative_gScore < neighborPtr->gScore)  // 已经拓展过，更新
-                    {                                                 // in open set and need update
-                        neighborPtr->cameFrom = current;
-                        neighborPtr->gScore = tentative_gScore;
-                        neighborPtr->fScore = tentative_gScore + getHeu(neighborPtr, endPtr);
-                        neighborPtr->mode = ego_planner::ROLL;
-                        openSet_.push(neighborPtr);
-                    }
+                    printDecision("NO_JUMP_DETOUR", neighbor_pos, dx, dy, raw_top, inflated_top, roll_possible,
+                                  jumpable, frontal, jump_possible, roll_cost, jump_cost, jumpable_detour_cost,
+                                  detour_required);
                 }
+
+                // 跳不过且可绕 -> 不加入 occupied neighbor；free-cell 扩展会形成 ROLL detour。
+                // 跳不过且绕不过 -> openSet 最终耗尽，A* fail。
+                continue;
             }  // end of for loop of neighbor expansion
         ros::Time time_2 = ros::Time::now();
         if ((time_2 - time_1).toSec() > 0.2)

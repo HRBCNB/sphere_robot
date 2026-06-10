@@ -259,18 +259,18 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
 
             /*step4: 进入重规划后端部分*/
             bool success = callReboundReplan(true, flag_random_poly_init);
-            if (success)
-            {
-                changeFSMExecState(EXEC_TRAJ, "FSM");
-                flag_escape_emergency_ = true;
-            }
             // 测试Astar
-            else if (planner_manager_->isAStarOnly())
+            if (planner_manager_->isAStarOnly())
             {
                 have_target_ = false;
                 trigger_ = false;
                 ROS_WARN("[EGOReplanFSM] astar_only finished: keep A* markers and stop replanning loop.");
                 changeFSMExecState(WAIT_TARGET, "FSM");
+            }
+            else if (success)
+            {
+                changeFSMExecState(EXEC_TRAJ, "FSM");
+                flag_escape_emergency_ = true;
             }
             else
             {
@@ -432,6 +432,12 @@ bool EGOReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPo
         planner_manager_->reboundReplan(start_pt_, start_vel_, start_acc_, local_target_pt_, local_target_vel_,
                                         (have_new_target_ || flag_use_poly_init), flag_randomPolyTraj);
     have_new_target_ = false;
+
+    if (planner_manager_->isAStarOnly())
+    {
+        cout << "astar_only_plan_success=" << plan_success << endl;
+        return plan_success;
+    }
 
     cout << "final_plan_success=" << plan_success << endl;
 

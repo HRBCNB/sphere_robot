@@ -44,6 +44,8 @@ struct GridNode
         UNDEFINED
     };
     ego_planner::TRAJ_MODE mode{ego_planner::ROLL};
+    double dist_since_jump{1e9};
+    bool detouring{false};
     Eigen::Vector3i index;
 
     double gScore{inf}, fScore{inf};
@@ -107,8 +109,18 @@ class AStar
     double max_jump_h_;          // Maximum jump height (m)
     double max_jump_d_;          // Maximum jump distance (m)
     double jump_penalty_;        // Extra cost for jumping
+    double jump_takeoff_clearance_;  // Preferred free distance before a jump obstacle
+    double jump_landing_clearance_;  // Preferred free distance after a jump obstacle
+    double roll_over_height_;    // Max obstacle top above planning height that can be rolled over
+    double roll_over_penalty_;   // Extra cost for rolling over low obstacles
+    double min_roll_after_jump_;  // Minimum rolling distance after landing before another jump is allowed
+    double detour_exit_deviation_;  // Leave detour mode after returning close enough to the start-goal line
+    double frontal_jump_cos_;  // Minimum alignment with current-to-goal direction for jump attempts
+    double jumpable_detour_penalty_;  // Extra cost for detouring around a frontal obstacle that is jumpable
     double line_dev_weight_;     // Cost weight for deviation from the start-goal line
     double max_line_deviation_;  // Hard corridor limit from the start-goal line, disabled when <= 0
+    bool debug_decisions_;
+    int debug_decision_limit_;
     bool use_inflate_for_jump_;
     bool jump_from_inflated_;
     int jump_fail_map_{0};

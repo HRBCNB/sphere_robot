@@ -189,6 +189,7 @@ class GridMap
     Eigen::Vector3d getOrigin();
     int getVoxelNum();
     double getObstacleHeight(const Eigen::Vector3d& pos);
+    double getRawObstacleHeight(const Eigen::Vector3d& pos);
 
     typedef std::shared_ptr<GridMap> Ptr;
 

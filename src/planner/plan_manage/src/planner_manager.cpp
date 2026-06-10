@@ -19,6 +19,28 @@ EGOPlannerManager::~EGOPlannerManager()
     std::cout << "des manager" << std::endl;
 }
 
+bool EGOPlannerManager::isTrajectoryCollisionFree(UniformBspline& position_traj, double sample_step, Eigen::Vector3d* hit_pos) const
+{
+    if (!grid_map_) return true;
+
+    double t_start = 0.0;
+    double t_end = 0.0;
+    position_traj.getTimeSpan(t_start, t_end);
+    const double dt = std::max(0.01, sample_step);
+
+    for (double t = t_start; t <= t_end + 1e-6; t += dt)
+    {
+        const Eigen::Vector3d pos = position_traj.evaluateDeBoorT(std::min(t, t_end));
+        if (grid_map_->getInflateOccupancy(pos))
+        {
+            if (hit_pos) *hit_pos = pos;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualization::Ptr vis)
 {
     /* read algorithm parameters */
@@ -32,7 +54,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/astar_only", astar_only_, false);
     nh.param("manager/astar_test_wall", astar_test_wall_, false);
     nh.param("manager/astar_test_scene", astar_test_scene_, std::string("single"));
-    nh.param("manager/astar_height", astar_height_, 0.25);
+    nh.param("manager/astar_height", astar_height_, 0.0);
     nh.param("manager/astar_wall_x", astar_wall_x_, -13.5);
     nh.param("manager/astar_wall_thickness", astar_wall_thickness_, 0.4);
     nh.param("manager/astar_wall_y_half_width", astar_wall_y_half_width_, 9.0);
@@ -75,6 +97,19 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         return false;
     }
 
+    if (direct_astar_jump_active_ && local_data_.duration_ > 1e-3)
+    {
+        const double t_cur = (ros::Time::now() - local_data_.start_time_).toSec();
+        if (t_cur >= 0.0 && t_cur < direct_astar_jump_hold_time_)
+        {
+            ROS_INFO_THROTTLE(0.5, "[EGOPlannerManager] keep current direct A* jump traj, t=%.2f/%.2f",
+                              t_cur, direct_astar_jump_hold_time_);
+            continous_failures_count_ = 0;
+            return true;
+        }
+        direct_astar_jump_active_ = false;
+    }
+
     if (astar_only_)
     {
         Eigen::Vector3d astar_start = start_pt;
@@ -113,12 +148,27 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             }
             else if (astar_test_scene_ == "bend")
             {
-                add_box(-16.0, -15.6, -0.45, 0.55, 0.0, 0.30);
-                add_box(-14.45, -13.85, -0.45, 0.25, 0.0, 1.10);
-                add_box(-12.6, -12.2, -0.15, 0.85, 0.0, 0.30);
-                add_box(-13.5, -12.8, 1.35, 2.20, 0.0, 0.45);
-                add_box(-11.8, -11.2, -1.80, -1.10, 0.0, 0.45);
-                ROS_WARN("[EGOPlannerManager] astar_only inserted bend test obstacles, voxels=%d", occupied_points);
+                // Mixed demo scene along the start-goal line:
+                // 1) wide very-low bump: should stay ROLL with roll-over cost.
+                add_box(-16.75, -16.35, -0.95, 0.95, 0.0, 0.10);
+
+                // 2) low jump wall across the local corridor: too high to roll over, low enough to JUMP.
+                add_box(-15.35, -15.05, -0.85, 0.85, 0.0, 0.38);
+                // Side guards make detouring this jump wall more expensive than a short jump.
+                add_box(-15.55, -14.85, 1.10, 1.75, 0.0, 0.80);
+                add_box(-15.55, -14.85, -1.75, -1.10, 0.0, 0.80);
+
+                // 3) tall block on the center line: should be ROLL detour, not jump.
+                add_box(-13.65, -13.00, -0.60, 0.60, 0.0, 1.20);
+
+                // 4) second narrow low wall after the detour: should allow another JUMP after returning to the line.
+                add_box(-11.70, -11.40, -0.65, 0.65, 0.0, 0.35);
+
+                // Side clutter that makes the environment less empty while leaving visible detour corridors.
+                add_box(-13.95, -13.45, 1.45, 2.20, 0.0, 0.55);
+                add_box(-12.70, -12.10, -2.00, -1.20, 0.0, 0.55);
+                add_box(-10.80, -10.25, 1.15, 1.85, 0.0, 0.40);
+                ROS_WARN("[EGOPlannerManager] astar_only inserted mixed roll/jump bend test obstacles, voxels=%d", occupied_points);
             }
             else if (astar_test_scene_ == "detour")
             {
@@ -192,7 +242,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         ROS_WARN("[EGOPlannerManager] astar_only direct A*: paths=%zu, nodes=%d, jump_nodes=%d, z=%.2f. Skip bspline optimization and trajectory publishing.",
                  a_star_pathes.size(), total_nodes, jump_nodes, astar_height_);
         continous_failures_count_ = 0;
-        return false;
+        return !a_star_pathes.empty();
     }
 
     // 统计本次重规划各阶段耗时。
@@ -208,6 +258,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     vector<Eigen::Vector3d> point_set, start_end_derivatives;
     vector<TRAJ_MODE> point_modes;
     vector<vector<PathNode>> init_a_star_pathes;
+    double direct_astar_jump_end_ratio = 0.0;
     static bool flag_first_call = true, flag_force_polynomial = false;
     bool flag_regenerate = false;
     do  // 采样pointset
@@ -439,7 +490,12 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
                 for (const auto& node : sampled_path)
                 {
-                    point_set.push_back(node.pos);
+                    Eigen::Vector3d pos = node.pos;
+                    if (node.mode == ROLL)
+                    {
+                        pos.z() = astar_height_;
+                    }
+                    point_set.push_back(pos);
                     point_modes.push_back(node.mode);
                 }
 
@@ -452,8 +508,34 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 const bool has_jump = std::any_of(point_modes.begin(), point_modes.end(), [](const TRAJ_MODE mode) {
                     return mode == JUMP;
                 });
-                ROS_INFO("[EGOPlannerManager] use direct A* init path: raw_points=%zu, sampled_points=%zu, sample_dist=%.2f, mode=%s",
-                         raw_path.size(), point_set.size(), sample_dist, has_jump ? "JUMP" : "ROLL");
+                if (has_jump && point_modes.size() > 1)
+                {
+                    auto last_jump_it = std::find(point_modes.rbegin(), point_modes.rend(), JUMP);
+                    const size_t last_jump_id = point_modes.size() - 1 - std::distance(point_modes.rbegin(), last_jump_it);
+                    direct_astar_jump_end_ratio = static_cast<double>(last_jump_id) /
+                                                  static_cast<double>(point_modes.size() - 1);
+                }
+                double max_sample_gap = 0.0;
+                for (size_t i = 1; i < point_set.size(); ++i)
+                {
+                    max_sample_gap = std::max(max_sample_gap, (point_set[i] - point_set[i - 1]).norm());
+                }
+
+                // Cubic B-spline derivatives scale roughly with 3*d/dt and 6*d/dt^2.
+                // Direct A* paths, especially jump arcs, need a larger initial interval than flat rolling paths.
+                const double vel_dt = pp_.max_vel_ > 1e-3 ? 3.0 * max_sample_gap / pp_.max_vel_ : ts;
+                const double acc_dt = pp_.max_acc_ > 1e-3 ? std::sqrt(6.0 * max_sample_gap / pp_.max_acc_) : ts;
+                const double direct_astar_ts = std::max(ts, std::max(vel_dt, acc_dt)) * (has_jump ? 1.15 : 1.05);
+                if (direct_astar_ts > ts)
+                {
+                    ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",
+                             ts, direct_astar_ts, max_sample_gap);
+                    ts = direct_astar_ts;
+                }
+
+                ROS_INFO("[EGOPlannerManager] use direct A* init path: raw_points=%zu, sampled_points=%zu, sample_dist=%.2f, mode=%s, jump_end=%.2f",
+                         raw_path.size(), point_set.size(), sample_dist, has_jump ? "JUMP" : "ROLL",
+                         direct_astar_jump_end_ratio);
             }
             else
             {
@@ -505,6 +587,17 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 }
             }
         }
+        if (use_direct_astar_init)
+        {
+            for (int i = 0; i < ctrl_pts.cols(); ++i)
+            {
+                if (ctrl_point_modes[i] == ROLL)
+                {
+                    ctrl_pts(2, i) = astar_height_;
+                }
+            }
+            bspline_optimizer_rebound_->setControlPoints(ctrl_pts);
+        }
         bspline_optimizer_rebound_->setControlPointModes(ctrl_point_modes);
     }
 
@@ -555,9 +648,29 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
         if (use_direct_astar_init)
         {
-            pos.lengthenTime(ratio);
-            ROS_INFO("[EGOPlannerManager] direct A* init: lengthen time only, keep geometric path unchanged. ratio=%.3f",
-                     ratio);
+            constexpr int MAX_DIRECT_ASTAR_TIME_SCALE_NUM = 5;
+            bool direct_feasible = false;
+
+            for (int scale_id = 0; scale_id < MAX_DIRECT_ASTAR_TIME_SCALE_NUM; ++scale_id)
+            {
+                const double scale_ratio = std::max(1.01, ratio * 1.05);
+                pos.lengthenTime(scale_ratio);
+                ROS_INFO("[EGOPlannerManager] direct A* init: lengthen time only, keep geometric path unchanged. ratio=%.3f, iter=%d",
+                         scale_ratio, scale_id + 1);
+
+                if (pos.checkFeasibility(ratio, false))
+                {
+                    direct_feasible = true;
+                    break;
+                }
+            }
+
+            if (!direct_feasible)
+            {
+                ROS_WARN("[EGOPlannerManager] direct A* init is still dynamically infeasible after time scaling. last_ratio=%.3f",
+                         ratio);
+                flag_step_2_success = false;
+            }
         }
         else
         {
@@ -577,10 +690,28 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         return false;
     }
 
+    Eigen::Vector3d hit_pos = Eigen::Vector3d::Zero();
+    const double collision_check_dt = std::max(0.01, ts * 0.2);
+    if (!isTrajectoryCollisionFree(pos, collision_check_dt, &hit_pos))
+    {
+        ROS_WARN("[EGOPlannerManager] final B-spline hits inflated obstacle, reject traj. hit=(%.2f, %.2f, %.2f), dt=%.3f",
+                 hit_pos.x(), hit_pos.y(), hit_pos.z(), collision_check_dt);
+        continous_failures_count_++;
+        return false;
+    }
+
     t_refine = ros::Time::now() - t_start;
 
     // 保存最终轨迹，供后续跟踪控制器使用。
     updateTrajInfo(pos, ros::Time::now());
+    direct_astar_jump_active_ = use_direct_astar_init && direct_astar_jump_end_ratio > 0.0;
+    if (direct_astar_jump_active_)
+    {
+        direct_astar_jump_hold_time_ = std::min(local_data_.duration_,
+                                                local_data_.duration_ * direct_astar_jump_end_ratio + 0.4);
+        ROS_INFO("[EGOPlannerManager] hold direct A* jump traj until %.2fs, duration=%.2fs",
+                 direct_astar_jump_hold_time_, local_data_.duration_);
+    }
 
     cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec()
          << "\033[0m,optimize:" << (t_init + t_opt).toSec() << ",refine:" << t_refine.toSec() << endl;
