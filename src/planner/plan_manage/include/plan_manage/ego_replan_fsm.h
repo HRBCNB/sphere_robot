@@ -56,6 +56,8 @@ namespace ego_planner
     int waypoint_num_;
     double planning_horizen_, planning_horizen_time_;
     double emergency_time_;
+    bool show_local_traj_, show_whole_traj_;
+    double whole_traj_sample_step_;
 
     /* planning data */
     bool trigger_, have_target_, have_odom_, have_new_target_;

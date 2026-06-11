@@ -73,12 +73,12 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("planner/use_inflate_for_jump", use_inflate_for_jump_, use_inflate_for_jump_);
     nh.param("planner/jump_from_inflated", jump_from_inflated_, jump_from_inflated_);
 
-    ROS_INFO("[AStar] jump params: h=%.2f, d=%.2f, penalty=%.2f, takeoff_clear=%.2f, landing_clear=%.2f, roll_h=%.2f, roll_penalty=%.2f, min_roll_after_jump=%.2f, detour_exit=%.2f, frontal_cos=%.2f, jumpable_detour_penalty=%.2f, corridor=%.2f, debug=%s/%d, jump_from_inflated=%s, use_inflate_for_jump=%s",
-             max_jump_h_, max_jump_d_, jump_penalty_, jump_takeoff_clearance_, jump_landing_clearance_,
-             roll_over_height_, roll_over_penalty_, min_roll_after_jump_,
-             detour_exit_deviation_, frontal_jump_cos_, jumpable_detour_penalty_, max_line_deviation_,
-             debug_decisions_ ? "true" : "false", debug_decision_limit_, jump_from_inflated_ ? "true" : "false",
-             use_inflate_for_jump_ ? "true" : "false");
+    // ROS_INFO("[AStar] jump params: h=%.2f, d=%.2f, penalty=%.2f, takeoff_clear=%.2f, landing_clear=%.2f, roll_h=%.2f, roll_penalty=%.2f, min_roll_after_jump=%.2f, detour_exit=%.2f, frontal_cos=%.2f, jumpable_detour_penalty=%.2f, corridor=%.2f, debug=%s/%d, jump_from_inflated=%s, use_inflate_for_jump=%s",
+    //          max_jump_h_, max_jump_d_, jump_penalty_, jump_takeoff_clearance_, jump_landing_clearance_,
+    //          roll_over_height_, roll_over_penalty_, min_roll_after_jump_,
+    //          detour_exit_deviation_, frontal_jump_cos_, jumpable_detour_penalty_, max_line_deviation_,
+    //          debug_decisions_ ? "true" : "false", debug_decision_limit_, jump_from_inflated_ ? "true" : "false",
+    //          use_inflate_for_jump_ ? "true" : "false");
 }
 
 double AStar::getDiagHeu(GridNodePtr node1, GridNodePtr node2)
@@ -181,6 +181,9 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         return false;
     }
 
+    // ROS_INFO("[AStar] enter: start=(%.2f %.2f %.2f), goal=(%.2f %.2f %.2f)",
+    //          start_pt.x(), start_pt.y(), start_pt.z(), end_pt.x(), end_pt.y(), end_pt.z());
+
     // if ( start_pt(0) > -1 && start_pt(0) < 0 )
     //     cout << "start_pt=" << start_pt.transpose() << " end_pt=" << end_pt.transpose() << endl;
 
@@ -273,10 +276,11 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
             // if((time_2 - time_1).toSec() > 0.1)
             //     ROS_WARN("Time consume in A star path finding is %f", (time_2 - time_1).toSec() );
             gridPath_ = retrievePath(current);
-            ROS_INFO("[AStar] success: iter=%d, path_nodes=%zu, occ_neighbors=%d, roll_nodes=%d, roll_over_nodes=%d, jump_nodes=%d, detour_required=%d, jump_preferred=%d, jump_candidates=%d, feasible_jumps=%d",
-                     num_iter, gridPath_.size(), occupied_neighbor_count, roll_node_count, roll_over_node_count,
-                     jump_node_count, detour_required_count, jump_preferred_count, jump_candidate_count,
-                     feasible_jump_count);
+            // ROS_INFO("[AStar] success: iter=%d, path_nodes=%zu, occ_neighbors=%d, roll_nodes=%d, roll_over_nodes=%d, jump_nodes=%d, detour_required=%d, jump_preferred=%d, jump_candidates=%d, feasible_jumps=%d",
+            //          num_iter, gridPath_.size(), occupied_neighbor_count, roll_node_count, roll_over_node_count,
+            //          jump_node_count, detour_required_count, jump_preferred_count, jump_candidate_count,
+            //          feasible_jump_count);
+            //ROS_INFO("[AStar] exit: success, path_nodes=%zu", gridPath_.size());
             return true;
         }
         current->state = GridNode::CLOSEDSET;  // move current node from open set to closed set.
@@ -445,12 +449,12 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 return;
             }
             ++debug_decision_count;
-            ROS_INFO("[AStar][decision %d] %s cur=(%.2f %.2f %.2f) nb=(%.2f %.2f %.2f) step=(%d,%d) raw_top=%.2f infl_top=%.2f roll=%s roll_cost=%.2f jumpable=%s frontal=%s jump_possible=%s jump_cost=%.2f detour_extra=%.2f detouring=%s detour_required=%s dist_since_jump=%.2f g=%.2f",
-                     debug_decision_count, tag, current_expand_pos.x(), current_expand_pos.y(), current_expand_pos.z(),
-                     neighbor_pos.x(), neighbor_pos.y(), neighbor_pos.z(), step_x, step_y, raw_top, inflated_top,
-                     roll_possible ? "Y" : "N", roll_cost, jumpable ? "Y" : "N", frontal ? "Y" : "N",
-                     jump_possible ? "Y" : "N", jump_cost, detour_extra, current_detouring ? "Y" : "N",
-                     detour_required_now ? "Y" : "N", current->dist_since_jump, current->gScore);
+            // ROS_INFO("[AStar][decision %d] %s cur=(%.2f %.2f %.2f) nb=(%.2f %.2f %.2f) step=(%d,%d) raw_top=%.2f infl_top=%.2f roll=%s roll_cost=%.2f jumpable=%s frontal=%s jump_possible=%s jump_cost=%.2f detour_extra=%.2f detouring=%s detour_required=%s dist_since_jump=%.2f g=%.2f",
+            //          debug_decision_count, tag, current_expand_pos.x(), current_expand_pos.y(), current_expand_pos.z(),
+            //          neighbor_pos.x(), neighbor_pos.y(), neighbor_pos.z(), step_x, step_y, raw_top, inflated_top,
+            //          roll_possible ? "Y" : "N", roll_cost, jumpable ? "Y" : "N", frontal ? "Y" : "N",
+            //          jump_possible ? "Y" : "N", jump_cost, detour_extra, current_detouring ? "Y" : "N",
+            //          detour_required_now ? "Y" : "N", current->dist_since_jump, current->gScore);
         };
 
         bool detour_required = current_detouring;
@@ -650,22 +654,24 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
         ros::Time time_2 = ros::Time::now();
         if ((time_2 - time_1).toSec() > 0.2)
         {
-            ROS_WARN("Failed in A star path searching !!! 0.2 seconds time limit exceeded. iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d",
-                     num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count);
-            ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
-                     jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
-                     jump_fail_arc_occ_);
+            // ROS_WARN("Failed in A star path searching !!! 0.2 seconds time limit exceeded. iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d",
+            //          num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count);
+            // ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
+            //          jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
+            //          jump_fail_arc_occ_);
+            ROS_WARN("[AStar] exit: fail, timeout, iter=%d", num_iter);
             return false;
         }
     }
 
     ros::Time time_2 = ros::Time::now();
 
-    ROS_WARN("A star failed: iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d, time=%.3fs",
-             num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count, (time_2 - time_1).toSec());
-    ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
-             jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
-             jump_fail_arc_occ_);
+    // ROS_WARN("A star failed: iter=%d, occ_neighbors=%d, jump_candidates=%d, feasible_jumps=%d, time=%.3fs",
+    //          num_iter, occupied_neighbor_count, jump_candidate_count, feasible_jump_count, (time_2 - time_1).toSec());
+    // ROS_WARN("A star jump infeasible reasons: map=%d, landing_occ=%d, range=%d, peak_map=%d, arc_map=%d, arc_occ=%d",
+    //          jump_fail_map_, jump_fail_landing_occ_, jump_fail_range_, jump_fail_peak_map_, jump_fail_arc_map_,
+    //          jump_fail_arc_occ_);
+    //ROS_WARN("[AStar] exit: fail, iter=%d, time=%.3fs", num_iter, (time_2 - time_1).toSec());
 
     return false;
 }  // end AstarSearch

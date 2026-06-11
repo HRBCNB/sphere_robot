@@ -51,6 +51,7 @@ class PlanningVisualization
     void displayGlobalPathList(vector<Eigen::Vector3d> global_pts, const double scale, int id);
     void displayInitPathList(vector<Eigen::Vector3d> init_pts, const double scale, int id);
     void displayOptimalList(Eigen::MatrixXd optimal_pts, int id);
+    void displayBsplineTrajectory(UniformBspline& traj, double sample_step, int id);
     void displayAStarList(std::vector<std::vector<PathNode>> a_star_paths, int id);
     void displayArrowList(ros::Publisher& pub, const vector<Eigen::Vector3d>& list, double scale, Eigen::Vector4d color,
                           int id);

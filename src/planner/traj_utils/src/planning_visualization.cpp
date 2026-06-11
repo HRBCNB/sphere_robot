@@ -194,6 +194,26 @@ void PlanningVisualization::displayOptimalList(Eigen::MatrixXd optimal_pts, int 
     displayMarkerList(optimal_list_pub, list, 0.15, color, id);
 }
 
+void PlanningVisualization::displayBsplineTrajectory(UniformBspline& traj, double sample_step, int id)
+{
+    if (optimal_list_pub.getNumSubscribers() == 0)
+    {
+        return;
+    }
+
+    const double duration = traj.getTimeSum();
+    const double dt = std::max(0.02, sample_step);
+    vector<Eigen::Vector3d> list;
+    for (double t = 0.0; t < duration; t += dt)
+    {
+        list.push_back(traj.evaluateDeBoorT(t));
+    }
+    list.push_back(traj.evaluateDeBoorT(duration));
+
+    Eigen::Vector4d color(1, 0.15, 0.05, 1);
+    displayMarkerList(optimal_list_pub, list, 0.08, color, 100000 + id * 10000);
+}
+
 void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> a_star_paths,
                                              int id /* = Eigen::Vector4d(0.5,0.5,0,1)*/)
 {

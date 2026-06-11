@@ -10,6 +10,10 @@
   <arg name="goal_x" default="15.0"/>
   <arg name="goal_y" default="0.0"/>
   <arg name="goal_z" default="0.0"/>
+  <arg name="show_local_traj" default="true"/>
+  <arg name="show_whole_traj" default="true"/>
+  <arg name="whole_traj_sample_step" default="0.05"/>
+  <arg name="optimize_direct_astar" default="false"/>
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -31,6 +35,10 @@
     <arg name="planning_horizon" value="7.5"/>
     <arg name="flight_type" value="1"/>
     <arg name="astar_only" value="$(arg astar_only)"/>
+    <arg name="show_local_traj" value="$(arg show_local_traj)"/>
+    <arg name="show_whole_traj" value="$(arg show_whole_traj)"/>
+    <arg name="whole_traj_sample_step" value="$(arg whole_traj_sample_step)"/>
+    <arg name="optimize_direct_astar" value="$(arg optimize_direct_astar)"/>
 
     <arg name="point_num" value="1"/>
     <arg name="point0_x" value="15.0"/>
@@ -62,7 +70,9 @@
   <param name="/ego_planner_node/planner/jumpable_detour_penalty" value="5.0" type="double"/>
   <param name="/ego_planner_node/planner/roll_over_height" value="0.15" type="double"/>
   <param name="/ego_planner_node/planner/roll_over_penalty" value="0.5" type="double"/>
-  <param name="/ego_planner_node/planner/debug_decisions" value="true" type="bool"/>
+  <!-- <param name="/ego_planner_node/planner/debug_decisions" value="true" type="bool"/> -->
+
+  <param name="/ego_planner_node/planner/debug_decisions" value="false" type="bool"/>
   <param name="/ego_planner_node/planner/debug_decision_limit" value="120" type="int"/>
   <param name="/ego_planner_node/planner/use_inflate_for_jump" value="false" type="bool"/>
 

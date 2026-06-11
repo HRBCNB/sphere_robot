@@ -18,6 +18,9 @@ void EGOReplanFSM::init(ros::NodeHandle& nh)
     nh.param("fsm/planning_horizon", planning_horizen_, -1.0);
     nh.param("fsm/planning_horizen_time", planning_horizen_time_, -1.0);
     nh.param("fsm/emergency_time_", emergency_time_, 1.0);
+    nh.param("visualization/show_local_traj", show_local_traj_, true);
+    nh.param("visualization/show_whole_traj", show_whole_traj_, true);
+    nh.param("visualization/whole_traj_sample_step", whole_traj_sample_step_, 0.05);
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
@@ -113,7 +116,7 @@ void EGOReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg)
 {
     if (msg->poses[0].pose.position.z < -0.1) return;
 
-    cout << "Triggered!" << endl;
+    // cout << "Triggered!" << endl;
     trigger_ = true;
     init_pt_ = odom_pos_;
 
@@ -196,7 +199,7 @@ void EGOReplanFSM::printFSMExecState()
 {
     static string state_str[7] = {"INIT", "WAIT_TARGET", "GEN_NEW_TRAJ", "REPLAN_TRAJ", "EXEC_TRAJ", "EMERGENCY_STOP"};
 
-    cout << "[FSM]: state: " + state_str[int(exec_state_)] << endl;
+    // cout << "[FSM]: state: " + state_str[int(exec_state_)] << endl;
 }
 
 void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
@@ -206,8 +209,8 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
     if (fsm_num == 100)
     {
         printFSMExecState();
-        if (!have_odom_) cout << "no odom." << endl;
-        if (!trigger_) cout << "wait for goal." << endl;
+        // if (!have_odom_) cout << "no odom." << endl;
+        // if (!trigger_) cout << "wait for goal." << endl;
         fsm_num = 0;
     }
 
@@ -435,11 +438,11 @@ bool EGOReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPo
 
     if (planner_manager_->isAStarOnly())
     {
-        cout << "astar_only_plan_success=" << plan_success << endl;
+        // cout << "astar_only_plan_success=" << plan_success << endl;
         return plan_success;
     }
 
-    cout << "final_plan_success=" << plan_success << endl;
+    // cout << "final_plan_success=" << plan_success << endl;
 
     if (plan_success)
     {
@@ -471,7 +474,14 @@ bool EGOReplanFSM::callReboundReplan(bool flag_use_poly_init, bool flag_randomPo
 
         bspline_pub_.publish(bspline);
 
-        visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+        if (show_local_traj_)
+        {
+            visualization_->displayOptimalList(info->position_traj_.get_control_points(), 0);
+        }
+        if (show_whole_traj_)
+        {
+            visualization_->displayBsplineTrajectory(info->position_traj_, whole_traj_sample_step_, info->traj_id_);
+        }
     }
 
     return plan_success;

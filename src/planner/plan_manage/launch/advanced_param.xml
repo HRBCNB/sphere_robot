@@ -36,6 +36,10 @@
 
   <arg name="flight_type"/>
   <arg name="astar_only" default="false"/>
+  <arg name="show_local_traj" default="true"/>
+  <arg name="show_whole_traj" default="true"/>
+  <arg name="whole_traj_sample_step" default="0.05"/>
+  <arg name="optimize_direct_astar" default="false"/>
 
   <!-- main node -->
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
@@ -52,6 +56,9 @@
     <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/> <!--always set to 1.5 times grater than sensing horizen-->
     <param name="fsm/planning_horizen_time" value="3" type="double"/>
     <param name="fsm/emergency_time_" value="1.0" type="double"/>
+    <param name="visualization/show_local_traj" value="$(arg show_local_traj)" type="bool"/>
+    <param name="visualization/show_whole_traj" value="$(arg show_whole_traj)" type="bool"/>
+    <param name="visualization/whole_traj_sample_step" value="$(arg whole_traj_sample_step)" type="double"/>
 
     <param name="fsm/waypoint_num" value="$(arg point_num)" type="int"/>
     <param name="fsm/waypoint0_x" value="$(arg point0_x)" type="double"/>
@@ -133,6 +140,7 @@
     <param name="manager/astar_wall_thickness" value="0.4" type="double"/>
     <param name="manager/astar_wall_y_half_width" value="9.0" type="double"/>
     <param name="manager/astar_wall_height" value="0.35" type="double"/>
+    <param name="manager/optimize_direct_astar" value="$(arg optimize_direct_astar)" type="bool"/>
 
   <!-- trajectory optimization -->
     <param name="optimization/lambda_smooth" value="1.0" type="double"/>

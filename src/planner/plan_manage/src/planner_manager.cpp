@@ -16,7 +16,7 @@ EGOPlannerManager::EGOPlannerManager()
 
 EGOPlannerManager::~EGOPlannerManager()
 {
-    std::cout << "des manager" << std::endl;
+    // std::cout << "des manager" << std::endl;
 }
 
 bool EGOPlannerManager::isTrajectoryCollisionFree(UniformBspline& position_traj, double sample_step, Eigen::Vector3d* hit_pos) const
@@ -59,6 +59,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/astar_wall_thickness", astar_wall_thickness_, 0.4);
     nh.param("manager/astar_wall_y_half_width", astar_wall_y_half_width_, 9.0);
     nh.param("manager/astar_wall_height", astar_wall_height_, 0.35);
+    nh.param("manager/optimize_direct_astar", optimize_direct_astar_, false);
 
     local_data_.traj_id_ = 0;
     grid_map_.reset(new GridMap);
@@ -83,16 +84,17 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                                       bool flag_polyInit, bool flag_randomPolyTraj)
 {
     // 记录调用次数，便于调试重规划是否频繁触发。
-    static int count = 0;
-    std::cout << endl << "[rebo replan]: -------------------------------------" << count++ << std::endl;
+    // static int count = 0;
+    // std::cout << endl << "[rebo replan]: -------------------------------------" << count++ << std::endl;
     cout.precision(3);
-    cout << "start: " << start_pt.transpose() << ", " << start_vel.transpose()
-         << "\ngoal:" << local_target_pt.transpose() << ", " << local_target_vel.transpose() << endl;
+    // cout << "start: " << start_pt.transpose() << ", " << start_vel.transpose()
+
+    //      << "\ngoal:" << local_target_pt.transpose() << ", " << local_target_vel.transpose() << endl;
 
     // 起点已经非常接近目标点时，直接认为没有必要继续规划。
     if ((start_pt - local_target_pt).norm() < 0.2)
     {
-        cout << "Close to goal" << endl;
+        // cout << "Close to goal" << endl;
         continous_failures_count_++;
         return false;
     }
@@ -102,8 +104,9 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         const double t_cur = (ros::Time::now() - local_data_.start_time_).toSec();
         if (t_cur >= 0.0 && t_cur < direct_astar_jump_hold_time_)
         {
-            ROS_INFO_THROTTLE(0.5, "[EGOPlannerManager] keep current direct A* jump traj, t=%.2f/%.2f",
-                              t_cur, direct_astar_jump_hold_time_);
+            // ROS_INFO_THROTTLE(0.5, "[EGOPlannerManager] keep current direct A* jump traj, t=%.2f/%.2f",
+
+            //                   t_cur, direct_astar_jump_hold_time_);
             continous_failures_count_ = 0;
             return true;
         }
@@ -144,7 +147,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 add_box(-12.6, -12.2, -0.95, 0.15, 0.0, 0.30);
                 add_box(-13.4, -13.0, 1.40, 2.20, 0.0, 0.45);
                 add_box(-11.7, -11.3, -1.80, -1.05, 0.0, 0.45);
-                ROS_WARN("[EGOPlannerManager] astar_only inserted complex test obstacles, voxels=%d", occupied_points);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted complex test obstacles, voxels=%d", occupied_points);
             }
             else if (astar_test_scene_ == "bend")
             {
@@ -168,21 +171,22 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 add_box(-13.95, -13.45, 1.45, 2.20, 0.0, 0.55);
                 add_box(-12.70, -12.10, -2.00, -1.20, 0.0, 0.55);
                 add_box(-10.80, -10.25, 1.15, 1.85, 0.0, 0.40);
-                ROS_WARN("[EGOPlannerManager] astar_only inserted mixed roll/jump bend test obstacles, voxels=%d", occupied_points);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted mixed roll/jump bend test obstacles, voxels=%d", occupied_points);
             }
             else if (astar_test_scene_ == "detour")
             {
                 add_box(-16.8, -16.4, -0.45, 0.45, 0.0, 0.30);
                 add_box(-14.7, -13.3, -0.65, 0.65, 0.0, 1.25);
                 add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
-                ROS_WARN("[EGOPlannerManager] astar_only inserted detour test obstacles, voxels=%d", occupied_points);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted detour test obstacles, voxels=%d", occupied_points);
             }
             else
             {
                 add_box(astar_wall_x_ - astar_wall_thickness_ * 0.5, astar_wall_x_ + astar_wall_thickness_ * 0.5,
                         -astar_wall_y_half_width_, astar_wall_y_half_width_, 0.0, astar_wall_height_);
-                ROS_WARN("[EGOPlannerManager] astar_only inserted test wall into occupancy: x=%.2f, y=[%.2f, %.2f], h=%.2f, voxels=%d",
-                         astar_wall_x_, -astar_wall_y_half_width_, astar_wall_y_half_width_, astar_wall_height_, occupied_points);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted test wall into occupancy: x=%.2f, y=[%.2f, %.2f], h=%.2f, voxels=%d",
+
+                //          astar_wall_x_, -astar_wall_y_half_width_, astar_wall_y_half_width_, astar_wall_height_, occupied_points);
             }
         }
 
@@ -222,21 +226,22 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
         if (jump_nodes > 0)
         {
-            ROS_WARN("[EGOPlannerManager] A* jump span: first=(%.2f %.2f %.2f), last=(%.2f %.2f %.2f)",
-                     first_jump.x(), first_jump.y(), first_jump.z(), last_jump.x(), last_jump.y(), last_jump.z());
+            // ROS_WARN("[EGOPlannerManager] A* jump span: first=(%.2f %.2f %.2f), last=(%.2f %.2f %.2f)",
+
+            //          first_jump.x(), first_jump.y(), first_jump.z(), last_jump.x(), last_jump.y(), last_jump.z());
         }
 
-        for (size_t path_id = 0; path_id < a_star_pathes.size(); ++path_id)
-        {
-            const auto& path = a_star_pathes[path_id];
-            ROS_WARN("[EGOPlannerManager] A* path %zu points:", path_id);
-            for (size_t node_id = 0; node_id < path.size(); ++node_id)
-            {
-                const auto& node = path[node_id];
-                ROS_WARN("  [%03zu] %s  x=%.2f y=%.2f z=%.2f", node_id, node.mode == JUMP ? "JUMP" : "ROLL",
-                         node.pos.x(), node.pos.y(), node.pos.z());
-            }
-        }
+        // for (size_t path_id = 0; path_id < a_star_pathes.size(); ++path_id)
+        // {
+        //     const auto& path = a_star_pathes[path_id];
+        //     ROS_WARN("[EGOPlannerManager] A* path %zu points:", path_id);
+        //     for (size_t node_id = 0; node_id < path.size(); ++node_id)
+        //     {
+        //         const auto& node = path[node_id];
+        //         ROS_WARN("  [%03zu] %s  x=%.2f y=%.2f z=%.2f", node_id, node.mode == JUMP ? "JUMP" : "ROLL",
+        //                  node.pos.x(), node.pos.y(), node.pos.z());
+        //     }
+        // }
 
         visualization_->displayAStarList(a_star_pathes, 0);
         ROS_WARN("[EGOPlannerManager] astar_only direct A*: paths=%zu, nodes=%d, jump_nodes=%d, z=%.2f. Skip bspline optimization and trajectory publishing.",
@@ -528,24 +533,30 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 const double direct_astar_ts = std::max(ts, std::max(vel_dt, acc_dt)) * (has_jump ? 1.15 : 1.05);
                 if (direct_astar_ts > ts)
                 {
-                    ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",
-                             ts, direct_astar_ts, max_sample_gap);
+                    // ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",
+
+                    //          ts, direct_astar_ts, max_sample_gap);
                     ts = direct_astar_ts;
                 }
 
-                ROS_INFO("[EGOPlannerManager] use direct A* init path: raw_points=%zu, sampled_points=%zu, sample_dist=%.2f, mode=%s, jump_end=%.2f",
-                         raw_path.size(), point_set.size(), sample_dist, has_jump ? "JUMP" : "ROLL",
-                         direct_astar_jump_end_ratio);
+                // ROS_INFO("[EGOPlannerManager] use direct A* init path: raw_points=%zu, sampled_points=%zu, sample_dist=%.2f, mode=%s, jump_end=%.2f",
+
+
+                //          raw_path.size(), point_set.size(), sample_dist, has_jump ? "JUMP" : "ROLL",
+
+
+                //          direct_astar_jump_end_ratio);
             }
             else
             {
-                ROS_WARN("[EGOPlannerManager] direct A* init path has too few sampled points (%zu), keep polynomial init.",
-                         sampled_path.size());
+                // ROS_WARN("[EGOPlannerManager] direct A* init path has too few sampled points (%zu), keep polynomial init.",
+
+                //          sampled_path.size());
             }
         }
         else
         {
-            ROS_WARN("[EGOPlannerManager] direct A* init failed, keep polynomial init.");
+            // ROS_WARN("[EGOPlannerManager] direct A* init failed, keep polynomial init.");
         }
     }
 
@@ -609,21 +620,21 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     {
         visualization_->displayInitPathList(point_set, 0.2, 0);
     }
-    visualization_->displayAStarList(a_star_pathes, vis_id);
+    visualization_->displayAStarList(a_star_pathes, vis_id++);
 
     t_start = ros::Time::now();
 
     /*** STEP 2: OPTIMIZE - 对 B 样条控制点做避障和平滑优化 ***/
     bool flag_step_1_success = true;
-    if (use_direct_astar_init)
+    if (use_direct_astar_init && !optimize_direct_astar_)
     {
-        ROS_INFO("[EGOPlannerManager] direct A* init: skip rebound optimizer and keep A* B-spline control points.");
+        // ROS_INFO("[EGOPlannerManager] direct A* init: skip rebound optimizer and keep A* B-spline control points.");
     }
     else
     {
         flag_step_1_success = bspline_optimizer_rebound_->BsplineOptimizeTrajRebound(ctrl_pts, ts);
     }
-    cout << "first_optimize_step_success=" << flag_step_1_success << endl;
+    // cout << "first_optimize_step_success=" << flag_step_1_success << endl;
     if (!flag_step_1_success)
     {
         // visualization_->displayOptimalList( ctrl_pts, vis_id );
@@ -644,7 +655,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     if (!pos.checkFeasibility(ratio, false))
     {
         // 若速度/加速度超限，就通过拉长时间来重新分配轨迹参数。
-        cout << "Need to reallocate time." << endl;
+        // cout << "Need to reallocate time." << endl;
 
         if (use_direct_astar_init)
         {
@@ -655,8 +666,9 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             {
                 const double scale_ratio = std::max(1.01, ratio * 1.05);
                 pos.lengthenTime(scale_ratio);
-                ROS_INFO("[EGOPlannerManager] direct A* init: lengthen time only, keep geometric path unchanged. ratio=%.3f, iter=%d",
-                         scale_ratio, scale_id + 1);
+                // ROS_INFO("[EGOPlannerManager] direct A* init: lengthen time only, keep geometric path unchanged. ratio=%.3f, iter=%d",
+
+                //          scale_ratio, scale_id + 1);
 
                 if (pos.checkFeasibility(ratio, false))
                 {
@@ -667,8 +679,9 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
             if (!direct_feasible)
             {
-                ROS_WARN("[EGOPlannerManager] direct A* init is still dynamically infeasible after time scaling. last_ratio=%.3f",
-                         ratio);
+                // ROS_WARN("[EGOPlannerManager] direct A* init is still dynamically infeasible after time scaling. last_ratio=%.3f",
+
+                //          ratio);
                 flag_step_2_success = false;
             }
         }
@@ -683,9 +696,11 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
     if (!flag_step_2_success)
     {
-        printf(
-            "\033[34mThis refined trajectory hits obstacles. It doesn't matter if appeares occasionally. But if "
-            "continously appearing, Increase parameter \"lambda_fitness\".\n\033[0m");
+        // printf(
+
+        //     "\033[34mThis refined trajectory hits obstacles. It does not matter if appeares occasionally. But if "
+
+        //     "continously appearing, Increase parameter \"lambda_fitness\".\n\033[0m");
         continous_failures_count_++;
         return false;
     }
@@ -696,6 +711,11 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     {
         ROS_WARN("[EGOPlannerManager] final B-spline hits inflated obstacle, reject traj. hit=(%.2f, %.2f, %.2f), dt=%.3f",
                  hit_pos.x(), hit_pos.y(), hit_pos.z(), collision_check_dt);
+        static int rejected_bspline_vis_id = 0;
+        if (visualization_)
+        {
+            visualization_->displayBsplineTrajectory(pos, 0.05, 9000 + rejected_bspline_vis_id++);
+        }
         continous_failures_count_++;
         return false;
     }
@@ -709,12 +729,15 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     {
         direct_astar_jump_hold_time_ = std::min(local_data_.duration_,
                                                 local_data_.duration_ * direct_astar_jump_end_ratio + 0.4);
-        ROS_INFO("[EGOPlannerManager] hold direct A* jump traj until %.2fs, duration=%.2fs",
-                 direct_astar_jump_hold_time_, local_data_.duration_);
+        // ROS_INFO("[EGOPlannerManager] hold direct A* jump traj until %.2fs, duration=%.2fs",
+
+        //          direct_astar_jump_hold_time_, local_data_.duration_);
     }
 
-    cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec()
-         << "\033[0m,optimize:" << (t_init + t_opt).toSec() << ",refine:" << t_refine.toSec() << endl;
+    // cout << "total time:\033[42m" << (t_init + t_opt + t_refine).toSec()
+
+
+    //      << "\033[0m,optimize:" << (t_init + t_opt).toSec() << ",refine:" << t_refine.toSec() << endl;
 
     // success. YoY
     continous_failures_count_ = 0;

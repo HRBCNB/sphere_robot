@@ -63,6 +63,7 @@ class EGOPlannerManager
     double astar_wall_height_{0.35};
     bool direct_astar_jump_active_{false};
     double direct_astar_jump_hold_time_{0.0};
+    bool optimize_direct_astar_{false};
 
     void updateTrajInfo(const UniformBspline& position_traj, const ros::Time time_now);
     bool isTrajectoryCollisionFree(UniformBspline& position_traj, double sample_step, Eigen::Vector3d* hit_pos = nullptr) const;
