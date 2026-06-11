@@ -22,6 +22,7 @@ class ControlPoints
 {
    public:
     TRAJ_MODE mode{ROLL};
+    bool mode_locked{false};
     double clearance;
     int size{0};
     Eigen::MatrixXd points;  // control points, 3 x N
@@ -36,6 +37,7 @@ class ControlPoints
     {
         size = size_set;
         mode = ROLL;
+        mode_locked = false;
 
         base_point.clear();
         direction.clear();
@@ -135,6 +137,8 @@ class BsplineOptimizer
     //
     double dist0_;              // safe distance
     double max_vel_, max_acc_;  // dynamic limits
+    double astar_height_{0.0};
+    double roll_over_height_{0.15};
 
     int variable_num_;               // optimization variables
     int iter_num_;                   // iteration of the solver
@@ -153,6 +157,7 @@ class BsplineOptimizer
     void calcSmoothnessCost(const Eigen::MatrixXd& q, TRAJ_MODE traj_mode, double& cost, Eigen::MatrixXd& gradient,
                             bool falg_use_jerk = true);
     bool isRollSpan(const int start_id, const int span) const;
+    bool isAllowedRollOverPoint(const Eigen::Vector3d& pos) const;
     void calcFeasibilityCost(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient);
     void calcDistanceCostRebound(const Eigen::MatrixXd& q, double& cost, Eigen::MatrixXd& gradient, int iter_num,
                                  double smoothness_cost);

@@ -18,6 +18,8 @@ void BsplineOptimizer::setParam(ros::NodeHandle& nh)
     nh.param("optimization/max_acc", max_acc_, -1.0);
 
     nh.param("optimization/order", order_, 3);
+    nh.param("manager/astar_height", astar_height_, 0.0);
+    nh.param("planner/roll_over_height", roll_over_height_, 0.15);
 }
 
 void BsplineOptimizer::setEnvironment(const GridMap::Ptr& env)
@@ -44,6 +46,7 @@ void BsplineOptimizer::setControlPointModes(const std::vector<TRAJ_MODE>& modes)
     }
 
     cps_.point_modes = modes;
+    cps_.mode_locked = true;
     cps_.mode = std::find(modes.begin(), modes.end(), JUMP) == modes.end() ? ROLL : JUMP;
 }
 
@@ -83,7 +86,7 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
     constexpr int ENOUGH_INTERVAL = 2;
     double step_size = grid_map_->getResolution() /
                        ((init_points.col(0) - init_points.rightCols(1)).norm() / (init_points.cols() - 1)) / 2;
-    int in_id, out_id;
+    int in_id = 0, out_id = 0;
     vector<std::pair<int, int>> segment_ids;
     int same_occ_state_times = ENOUGH_INTERVAL + 1;
     bool occ, last_occ = false;
@@ -527,6 +530,24 @@ bool BsplineOptimizer::isRollSpan(const int start_id, const int span) const
         }
     }
     return true;
+}
+
+bool BsplineOptimizer::isAllowedRollOverPoint(const Eigen::Vector3d& pos) const
+{
+    if (!grid_map_ || !cps_.mode_locked)
+    {
+        return false;
+    }
+
+    if (std::abs(pos.z() - astar_height_) > 0.15)
+    {
+        return false;
+    }
+
+    const double raw_top = grid_map_->getRawObstacleHeight(pos);
+    const double inflated_top = grid_map_->getObstacleHeight(pos);
+    const double obstacle_top = raw_top > 1e-3 ? raw_top : inflated_top;
+    return obstacle_top > 0.0 && obstacle_top <= astar_height_ + roll_over_height_ + 1e-3;
 }
 
 /**
@@ -1015,10 +1036,31 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
 // 碰撞反弹优化
 bool BsplineOptimizer::BsplineOptimizeTrajRebound(Eigen::MatrixXd& optimal_points, double ts)
 {
-    // TODO： 考虑轨迹的mode
     setBsplineInterval(ts);
 
-    bool flag_success = rebound_optimize();
+    bool flag_success = false;
+    if (cps_.mode_locked)
+    {
+        ref_pts_.clear();
+        ref_pts_.reserve(cps_.points.cols());
+        for (int i = 0; i < cps_.points.cols(); ++i)
+        {
+            ref_pts_.push_back(cps_.points.col(i));
+        }
+
+        flag_success = refine_optimize();
+        for (int i = 0; i < cps_.points.cols() && i < static_cast<int>(cps_.point_modes.size()); ++i)
+        {
+            if (cps_.point_modes[i] == ROLL)
+            {
+                cps_.points(2, i) = astar_height_;
+            }
+        }
+    }
+    else
+    {
+        flag_success = rebound_optimize();
+    }
 
     optimal_points = cps_.points;
 
@@ -1095,7 +1137,8 @@ bool BsplineOptimizer::rebound_optimize()
             for (double t = tm; t < tmp * 2 / 3;
                  t += t_step)  // Only check the closest 2/3 partition of the whole trajectory.
             {
-                flag_occ = grid_map_->getInflateOccupancy(traj.evaluateDeBoorT(t));
+                const Eigen::Vector3d check_pos = traj.evaluateDeBoorT(t);
+                flag_occ = grid_map_->getInflateOccupancy(check_pos) && !isAllowedRollOverPoint(check_pos);
                 if (flag_occ)
                 {
                     // cout << "hit_obs, t=" << t << " P=" << traj.evaluateDeBoorT(t).transpose() << endl;
@@ -1192,7 +1235,8 @@ bool BsplineOptimizer::refine_optimize()
                  ->getResolution());  // Step size is defined as the maximum size that can passes throgth every gird.
         for (double t = tm; t < tmp * 2 / 3; t += t_step)
         {
-            if (grid_map_->getInflateOccupancy(traj.evaluateDeBoorT(t)))
+            const Eigen::Vector3d check_pos = traj.evaluateDeBoorT(t);
+            if (grid_map_->getInflateOccupancy(check_pos) && !isAllowedRollOverPoint(check_pos))
             {
                 // cout << "Refined traj hit_obs, t=" << t << " P=" << traj.evaluateDeBoorT(t).transpose() << endl;
 

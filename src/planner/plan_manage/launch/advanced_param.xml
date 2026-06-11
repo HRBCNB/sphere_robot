@@ -40,6 +40,10 @@
   <arg name="show_whole_traj" default="true"/>
   <arg name="whole_traj_sample_step" default="0.05"/>
   <arg name="optimize_direct_astar" default="false"/>
+  <arg name="direct_astar_sample_dist" default="0.8"/>
+  <arg name="direct_astar_smooth_iter" default="2"/>
+  <arg name="direct_astar_smooth_weight" default="0.45"/>
+  <arg name="direct_astar_jump_clearance" default="0.25"/>
 
   <!-- main node -->
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
@@ -141,6 +145,10 @@
     <param name="manager/astar_wall_y_half_width" value="9.0" type="double"/>
     <param name="manager/astar_wall_height" value="0.35" type="double"/>
     <param name="manager/optimize_direct_astar" value="$(arg optimize_direct_astar)" type="bool"/>
+    <param name="manager/direct_astar_sample_dist" value="$(arg direct_astar_sample_dist)" type="double"/>
+    <param name="manager/direct_astar_smooth_iter" value="$(arg direct_astar_smooth_iter)" type="int"/>
+    <param name="manager/direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)" type="double"/>
+    <param name="manager/direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)" type="double"/>
 
   <!-- trajectory optimization -->
     <param name="optimization/lambda_smooth" value="1.0" type="double"/>

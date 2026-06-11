@@ -14,6 +14,10 @@
   <arg name="show_whole_traj" default="true"/>
   <arg name="whole_traj_sample_step" default="0.05"/>
   <arg name="optimize_direct_astar" default="false"/>
+  <arg name="direct_astar_sample_dist" default="0.8"/>
+  <arg name="direct_astar_smooth_iter" default="2"/>
+  <arg name="direct_astar_smooth_weight" default="0.45"/>
+  <arg name="direct_astar_jump_clearance" default="0.25"/>
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -39,6 +43,10 @@
     <arg name="show_whole_traj" value="$(arg show_whole_traj)"/>
     <arg name="whole_traj_sample_step" value="$(arg whole_traj_sample_step)"/>
     <arg name="optimize_direct_astar" value="$(arg optimize_direct_astar)"/>
+    <arg name="direct_astar_sample_dist" value="$(arg direct_astar_sample_dist)"/>
+    <arg name="direct_astar_smooth_iter" value="$(arg direct_astar_smooth_iter)"/>
+    <arg name="direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)"/>
+    <arg name="direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)"/>
 
     <arg name="point_num" value="1"/>
     <arg name="point0_x" value="15.0"/>

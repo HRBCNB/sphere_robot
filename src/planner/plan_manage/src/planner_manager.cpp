@@ -31,10 +31,24 @@ bool EGOPlannerManager::isTrajectoryCollisionFree(UniformBspline& position_traj,
     for (double t = t_start; t <= t_end + 1e-6; t += dt)
     {
         const Eigen::Vector3d pos = position_traj.evaluateDeBoorT(std::min(t, t_end));
-        if (grid_map_->getInflateOccupancy(pos))
+        Eigen::Vector3d check_pos = pos;
+        if (std::abs(pos.z() - astar_height_) <= 0.08)
         {
-            if (hit_pos) *hit_pos = pos;
-            return false;
+            check_pos.z() = astar_height_;
+        }
+
+        if (grid_map_->getInflateOccupancy(check_pos))
+        {
+            const double raw_top = grid_map_->getRawObstacleHeight(check_pos);
+            const double inflated_top = grid_map_->getObstacleHeight(check_pos);
+            const double obstacle_top = raw_top > 1e-3 ? raw_top : inflated_top;
+            const bool roll_over_allowed = std::abs(check_pos.z() - astar_height_) <= 0.15 && obstacle_top > 0.0 &&
+                                           obstacle_top <= astar_height_ + roll_over_height_ + 1e-3;
+            if (!roll_over_allowed)
+            {
+                if (hit_pos) *hit_pos = pos;
+                return false;
+            }
         }
     }
 
@@ -60,6 +74,11 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/astar_wall_y_half_width", astar_wall_y_half_width_, 9.0);
     nh.param("manager/astar_wall_height", astar_wall_height_, 0.35);
     nh.param("manager/optimize_direct_astar", optimize_direct_astar_, false);
+    nh.param("manager/direct_astar_sample_dist", direct_astar_sample_dist_, 0.8);
+    nh.param("manager/direct_astar_smooth_iter", direct_astar_smooth_iter_, 2);
+    nh.param("manager/direct_astar_smooth_weight", direct_astar_smooth_weight_, 0.45);
+    nh.param("manager/direct_astar_jump_clearance", direct_astar_jump_clearance_, 0.25);
+    nh.param("planner/roll_over_height", roll_over_height_, 0.15);
 
     local_data_.traj_id_ = 0;
     grid_map_.reset(new GridMap);
@@ -448,7 +467,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
         {
             const vector<PathNode> raw_path = bspline_optimizer_rebound_->a_star_->getPath();
             vector<PathNode> sampled_path;
-            const double sample_dist = std::max(0.05, pp_.ctrl_pt_dist);
+            const double sample_dist = std::max(0.05, direct_astar_sample_dist_);
 
             if (!raw_path.empty())
             {
@@ -500,13 +519,84 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     {
                         pos.z() = astar_height_;
                     }
+                    else
+                    {
+                        Eigen::Vector3d base_pos = pos;
+                        base_pos.z() = astar_height_;
+                        const double raw_top = grid_map_->getRawObstacleHeight(base_pos);
+                        const double inflated_top = grid_map_->getObstacleHeight(base_pos);
+                        const double obstacle_top = raw_top > 1e-3 ? raw_top : inflated_top;
+                        if (obstacle_top > astar_height_ + roll_over_height_)
+                        {
+                            pos.z() = std::max(pos.z(), obstacle_top + direct_astar_jump_clearance_);
+                        }
+                    }
                     point_set.push_back(pos);
                     point_modes.push_back(node.mode);
                 }
 
-                start_end_derivatives.push_back(start_vel);
-                start_end_derivatives.push_back(local_target_vel);
-                start_end_derivatives.push_back(start_acc);
+                auto isRollPointSafe = [&](const Eigen::Vector3d& pos) {
+                    if (!grid_map_->getInflateOccupancy(pos))
+                    {
+                        return true;
+                    }
+
+                    const double raw_top = grid_map_->getRawObstacleHeight(pos);
+                    const double inflated_top = grid_map_->getObstacleHeight(pos);
+                    const double obstacle_top = raw_top > 1e-3 ? raw_top : inflated_top;
+                    return std::abs(pos.z() - astar_height_) <= 0.15 && obstacle_top > 0.0 &&
+                           obstacle_top <= astar_height_ + roll_over_height_ + 1e-3;
+                };
+
+                auto isRollSegmentSafe = [&](const Eigen::Vector3d& p0, const Eigen::Vector3d& p1) {
+                    const double len = (p1 - p0).norm();
+                    const double step = std::max(0.02, grid_map_->getResolution() * 0.5);
+                    const int sample_num = std::max(1, static_cast<int>(std::ceil(len / step)));
+                    for (int sid = 0; sid <= sample_num; ++sid)
+                    {
+                        const double ratio = static_cast<double>(sid) / static_cast<double>(sample_num);
+                        Eigen::Vector3d pos = p0 * (1.0 - ratio) + p1 * ratio;
+                        pos.z() = astar_height_;
+                        if (!isRollPointSafe(pos))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+
+                const int smooth_iter = std::max(0, direct_astar_smooth_iter_);
+                const double smooth_weight = std::max(0.0, std::min(0.8, direct_astar_smooth_weight_));
+                for (int iter = 0; iter < smooth_iter && point_set.size() >= 3; ++iter)
+                {
+                    vector<Eigen::Vector3d> smoothed = point_set;
+                    for (size_t i = 1; i + 1 < point_set.size(); ++i)
+                    {
+                        if (point_modes[i - 1] != ROLL || point_modes[i] != ROLL || point_modes[i + 1] != ROLL)
+                        {
+                            continue;
+                        }
+
+                        Eigen::Vector3d target = point_set[i] * (1.0 - smooth_weight) +
+                                                 0.5 * smooth_weight * (point_set[i - 1] + point_set[i + 1]);
+                        target.z() = astar_height_;
+                        if (isRollSegmentSafe(smoothed[i - 1], target) && isRollSegmentSafe(target, smoothed[i + 1]))
+                        {
+                            smoothed[i] = target;
+                        }
+                    }
+                    point_set.swap(smoothed);
+                }
+
+                Eigen::Vector3d direct_start_vel = start_vel;
+                Eigen::Vector3d direct_target_vel = local_target_vel;
+                Eigen::Vector3d direct_start_acc = start_acc;
+                direct_start_vel.z() = 0.0;
+                direct_target_vel.z() = 0.0;
+                direct_start_acc.z() = 0.0;
+                start_end_derivatives.push_back(direct_start_vel);
+                start_end_derivatives.push_back(direct_target_vel);
+                start_end_derivatives.push_back(direct_start_acc);
                 start_end_derivatives.push_back(Eigen::Vector3d::Zero());
                 init_a_star_pathes.push_back(raw_path);
 
@@ -589,7 +679,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             if (point_modes[i] != JUMP) continue;
 
             const int ctrl_id = static_cast<int>(std::round(static_cast<double>(i) / denom * ctrl_last));
-            for (int offset = -1; offset <= 1; ++offset)
+            for (int offset = -2; offset <= 2; ++offset)
             {
                 const int id = ctrl_id + offset;
                 if (id >= 0 && id <= ctrl_last)
@@ -605,6 +695,18 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 if (ctrl_point_modes[i] == ROLL)
                 {
                     ctrl_pts(2, i) = astar_height_;
+                }
+                else
+                {
+                    Eigen::Vector3d base_pos = ctrl_pts.col(i);
+                    base_pos.z() = astar_height_;
+                    const double raw_top = grid_map_->getRawObstacleHeight(base_pos);
+                    const double inflated_top = grid_map_->getObstacleHeight(base_pos);
+                    const double obstacle_top = raw_top > 1e-3 ? raw_top : inflated_top;
+                    if (obstacle_top > astar_height_ + roll_over_height_)
+                    {
+                        ctrl_pts(2, i) = std::max(ctrl_pts(2, i), obstacle_top + direct_astar_jump_clearance_);
+                    }
                 }
             }
             bspline_optimizer_rebound_->setControlPoints(ctrl_pts);
@@ -706,7 +808,8 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     }
 
     Eigen::Vector3d hit_pos = Eigen::Vector3d::Zero();
-    const double collision_check_dt = std::max(0.01, ts * 0.2);
+    const double collision_check_dt = std::max(0.01, std::min(0.05, ts * 0.2));
+
     if (!isTrajectoryCollisionFree(pos, collision_check_dt, &hit_pos))
     {
         ROS_WARN("[EGOPlannerManager] final B-spline hits inflated obstacle, reject traj. hit=(%.2f, %.2f, %.2f), dt=%.3f",
