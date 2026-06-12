@@ -1,134 +1,186 @@
-本项目用于设计一个可以用于跳跃避障的球星机器人,用于硕士生毕业设计
+# 球形机器人跳跃避障规划说明
 
-# A* Roll / Jump 混合规划修改说明
+本项目用于设计一个可滚动、可跳跃避障的球形机器人，作为硕士毕业设计实验平台。
 
-## 建议提交信息
+本文档只记录当前实现的功能、实现方式、参数含义和验证方法，不记录提交日志。
+
+## 已实现功能
+
+### Roll / Jump 混合 A* 规划
+
+当前 A* 规划器面向球形机器人接地点规划，优先滚动，必要时跳跃：
+
+1. 普通空闲区域使用 `ROLL`。
+2. 低障碍可滚越时仍使用 `ROLL`，但增加滚越代价。
+3. 障碍不能滚越但可跳过时使用 `JUMP`。
+4. 障碍太高或跳跃不可行时，使用 `ROLL` 绕行。
+5. 跳不过且绕不过时，A* 搜索失败。
+
+ROLL 段默认贴地，使用 `astar_height` 作为接地点高度。当前测试场景中该值为 `0.0`。
+
+### 低障碍滚越
+
+低障碍滚越由 `roll_over_height` 控制。
+
+当障碍顶部高度不超过：
 
 ```text
-feat: 完善球形机器人 A* 滚动/跳跃混合规划
-
-- 重构 A* 邻居扩展逻辑，区分 ROLL、ROLL_OVER、JUMP 和 ROLL detour
-- 支持低障碍滚越、高障碍绕行、可跳低障碍提前起跳
-- 新增跳跃起跳/落点安全余量，避免贴障碍边缘起跳或落地
-- 修正 inflated obstacle shell 的高度判断，避免低障碍膨胀层被误判为必须绕行
-- 将 A* 路径按球形机器人接地点表达，ROLL 段保持贴地
-- 增加 A* 决策日志，输出 roll/jump/detour 代价和选择原因
-- 增加 bend 混合测试场景，展示 roll、jump 和 detour 行为
-- 修正 astar_only 调试模式的成功状态打印
-- 关闭 RViz 默认无人机 mesh 标识，避免与球形机器人显示冲突
+astar_height + roll_over_height
 ```
 
-如果想写得更短，可以用：
+该位置允许作为 `ROLL` 通过，只增加 `roll_over_penalty`。这样低矮障碍不会被误判为必须跳跃或绕行。
 
-```text
-feat: 实现球形机器人 roll/jump 混合 A* 规划
-```
+### 跳跃规划
 
-## 当前规划策略
-
-当前 A* 的目标是让球形机器人优先滚动，必要时跳跃：
-
-1. 普通 free cell -> `ROLL`
-2. 低障碍可滚越 -> `ROLL`，增加 `roll_over_penalty`
-3. 低障碍不可滚但可跳 -> `JUMP`
-4. 跳不过且可绕 -> 通过 free cell 形成 `ROLL detour`
-5. 跳不过且绕不过 -> A* fail
-
-这个顺序的含义是：能滚就滚，能绕就绕，跳跃只作为更严格、更贵的动作。
-
-## ROLL / ROLL_OVER
-
-ROLL 轨迹表示球形机器人的接地点，默认贴地：
-
-- `astar_height = 0.0`
-- ROLL 路径点 `z = 0.0`
-- ROLL 控制点在 direct A* 初始化后也压回地面高度
-
-低障碍滚越由 `roll_over_height` 控制。当前测试里低障碍高度不超过阈值时，仍然加入 `ROLL` 节点，只增加代价。
-
-## JUMP 逻辑
-
-JUMP 使用局部邻居方向，不再强行沿全局 start-goal 方向跳。
+JUMP 使用局部邻居方向生成，不强制沿全局 start-goal 方向跳。
 
 允许跳跃需要满足：
 
 - 当前分支不在 detour 状态
-- 落地后已经滚动超过 `min_roll_after_jump`
-- 障碍高度高于 roll-over 阈值，但不超过 `max_jump_h`
-- 跳跃方向和当前到目标方向足够一致：`dot(jump_dir, goal_dir) >= frontal_jump_cos`
-- `isJumpFeasible(start, landing)` 通过
-- landing 点在地图内、非占据、未进入 closed set
+- 距离上一次落地已经滚动超过 `min_roll_after_jump`
+- 障碍高度高于滚越阈值，但不超过 `max_jump_h`
+- 跳跃方向与当前到目标方向足够一致，满足 `frontal_jump_cos`
+- 起跳点、落点和跳跃弧线通过可行性检查
+- 落点在地图内且不是 occupied
 
-## 提前起跳和落点余量
+跳跃路径会插入抛物线采样点，JUMP 点在 RViz 中以橙红色点显示。
 
-之前的问题是：只有下一格已经是障碍时才尝试跳，所以起跳点和落点会贴着障碍边缘。
+### 提前起跳和落点安全余量
 
-现在新增：
-
-- `jump_takeoff_clearance`
-- `jump_landing_clearance`
-
-free cell 扩展时会向前看一小段距离，如果发现前方是“不能滚但可跳”的低障碍，就提前从当前点生成 `JUMP_EARLY` successor。
-
-落点搜索也会从障碍后安全距离之外开始，避免刚越过障碍就落地。
-
-当前默认值：
+为了避免贴着障碍起跳或刚越过障碍就落地，当前支持：
 
 ```text
-jump_takeoff_clearance = 0.30
-jump_landing_clearance = 0.30
+jump_takeoff_clearance
+jump_landing_clearance
 ```
 
-如果起跳/落地仍然贴边，可以调到 `0.40` 或 `0.50`；如果跳得太早、弧线太长，可以调回 `0.20`。
+当 ROLL 扩展时，如果前方短距离内出现可跳障碍，会提前生成 `JUMP` successor。落点搜索也会从障碍后方安全距离以外开始。
 
-## Detour 逻辑
+### Detour 绕行逻辑
 
-detour 表示当前分支正在绕行障碍。
-
-进入 detour 的情况：
-
-- 前方障碍不能 roll-over
-- 障碍不满足 jumpable 条件
-- 或 jump feasible 检查失败
+detour 表示当前分支正在绕过不可滚越、不可跳或跳跃检查失败的障碍。
 
 进入 detour 后：
 
-- 禁止在同一个绕行过程中突然再次 JUMP
-- 继续通过 free cell 或可滚越低障碍 ROLL
-- 当路径回到 start-goal 主线附近，`lineDeviation <= detour_exit_deviation`，退出 detour
+- 禁止在同一个绕行过程中突然再次跳跃
+- 继续通过 free cell 或可滚越低障碍滚动
+- 当路径回到 start-goal 主线附近时退出 detour
 
-这样允许一条局部路径多段跳，但不会出现“已经决定绕第二个障碍，又在绕行中乱跳”的情况。
+这样可以支持一条路径中有多段跳跃，同时避免绕行中出现不稳定的跳跃决策。
 
-## inflated / raw obstacle 高度修正
+### Direct A* 到 B-spline
 
-之前日志出现过：
+在 `astar_only:=false` 时，系统会把 direct A* 路径参数化为 B-spline 轨迹。
 
-```text
-raw_top=0.00 infl_top=0.10 roll=N jumpable=N
-```
-
-这说明 A* 看到的是膨胀层，但 raw obstacle 高度为 0，导致低障碍膨胀层被误判成既不能 roll 也不能 jump。
-
-现在模式判断使用：
-
-- raw 高度存在时，用 raw 高度
-- raw 高度为 0 但 inflated 高度存在时，用 inflated 高度
-
-这样低障碍的膨胀边缘也能正确判断为 `ROLL_OVER` 或 `JUMP`。
-
-## A* only 调试模式
-
-`astar_only:=true` 用来只看 A* marker，不发布 B-spline 控制轨迹。
-
-现在成功时会打印：
+当前默认：
 
 ```text
-astar_only_plan_success=1
+optimize_direct_astar = false
 ```
 
-不会再出现 A* 已经找到路径但 `final_plan_success=0` 造成误解的情况。
+也就是 direct A* 初始化路径会跳过旧的 rebound optimizer，尽量保持 A* 的 ROLL / JUMP / detour 结构。
 
-推荐测试命令：
+原因是旧 rebound optimizer 主要按普通飞行轨迹处理，容易破坏球形机器人的贴地 ROLL 和 JUMP 模式。
+
+### 最终碰撞检查
+
+最终 B-spline 发布前会做碰撞检查。
+
+当前策略：
+
+- 进入 raw 实体障碍：拒绝轨迹
+- 低障碍满足 roll-over：允许通过
+- 进入 inflated obstacle：默认拒绝轨迹
+- 低障碍满足 roll-over：允许通过
+- 非贴地或真实进入障碍体：拒绝轨迹
+
+当前不再允许最终蓝色 B-spline 穿过 inflated shell。这样 RViz 中只要出现蓝线，就应该和可视化障碍保持清楚分离。
+
+如果轨迹被拒绝，终端会出现类似：
+
+```text
+[EGOPlannerManager] final B-spline hits inflated obstacle, reject traj. hit=(x, y, z), dt=...
+```
+
+### 轨迹可视化
+
+当前 RViz 中主要显示：
+
+- A* ROLL 点
+- A* JUMP 点
+- 最终 B-spline 轨迹
+- 被拒绝的候选 B-spline
+- 局部控制点/局部轨迹辅助显示
+
+颜色含义：
+
+- 蓝色连续线：最终通过检查并发布的 B-spline 轨迹
+- 橙红色连续线：被最终碰撞检查 reject 的失败候选 B-spline，不是可执行轨迹
+- 洋红色点：A* ROLL 路径点
+- 橙红色点：A* JUMP 路径点
+- 淡紫色点/线：局部控制点或局部轨迹辅助显示
+
+判断标准：
+
+- 只有红线没有蓝线：当前候选 B-spline 被拒绝，没有可执行最终轨迹
+- 出现蓝线：当前规划结果已经通过最终检查并发布
+- 蓝线应避开可视化障碍和 inflated obstacle，不应压进障碍显示范围
+
+## 关键参数
+
+### Launch 参数
+
+`bend_jump_test.launch` 中常用参数：
+
+```bash
+astar_only:=false
+use_control:=false
+use_rviz:=true
+show_local_traj:=true
+show_whole_traj:=true
+whole_traj_sample_step:=0.05
+optimize_direct_astar:=false
+direct_astar_sample_dist:=0.8
+direct_astar_smooth_iter:=2
+direct_astar_smooth_weight:=0.45
+direct_astar_jump_clearance:=0.25
+```
+
+含义：
+
+- `astar_only`：只显示 A*，不发布 B-spline 轨迹
+- `show_local_traj`：显示局部控制点/局部轨迹
+- `show_whole_traj`：显示完整 B-spline 采样轨迹
+- `whole_traj_sample_step`：完整轨迹采样间隔
+- `optimize_direct_astar`：是否打开旧 rebound optimizer，默认不建议打开
+- `direct_astar_sample_dist`：direct A* 路径转 B-spline 前的采样距离
+- `direct_astar_smooth_iter`：direct A* ROLL 点轻量平滑迭代次数
+- `direct_astar_smooth_weight`：direct A* ROLL 点轻量平滑权重
+- `direct_astar_jump_clearance`：JUMP 段相对障碍顶部保留的高度余量
+
+### 规划参数
+
+常用规划参数：
+
+```text
+planner/max_jump_h
+planner/max_jump_d
+planner/jump_penalty
+planner/jump_takeoff_clearance
+planner/jump_landing_clearance
+planner/roll_over_height
+planner/roll_over_penalty
+planner/frontal_jump_cos
+planner/use_inflate_for_jump
+```
+
+当前 bend 测试场景中，`use_inflate_for_jump=false`，跳跃可行性主要参考 raw obstacle，避免 inflated shell 让跳跃过度保守。
+
+## 如何运行验证
+
+### 只看 A*
+
+用于验证 ROLL / JUMP / detour 决策是否合理：
 
 ```bash
 cd ~/workspace/sphere_robot
@@ -136,195 +188,114 @@ source devel/setup.bash
 roslaunch ego_planner bend_jump_test.launch astar_only:=true use_control:=false use_rviz:=true
 ```
 
-完整规划和控制测试：
+观察重点：
+
+- 低障碍是否优先 ROLL / ROLL_OVER
+- 可跳障碍是否出现 JUMP 点
+- 高障碍是否绕行
+- JUMP 起跳和落点是否留有安全距离
+
+### 完整规划 RViz 验证
+
+用于验证 A* 转 B-spline 后是否能发布最终轨迹：
 
 ```bash
 cd ~/workspace/sphere_robot
 source devel/setup.bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=true use_rviz:=true
+roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true optimize_direct_astar:=false
 ```
 
-## 可视化调整
+观察重点：
 
-默认 RViz 配置已经关闭 `/odom_visualization/robot` 的无人机 mesh marker。
+- 是否出现蓝色最终 B-spline
+- 蓝线是否保持在实体障碍外
+- 是否只出现红色失败候选轨迹
+- A* 点和 B-spline 之间偏差是否过大
 
-原因：当前对象已经改为球形机器人，原来的 hummingbird mesh 会误导观察。现在默认只看地图、A* 路径、轨迹和目标点。
+### 无 RViz 日志验证
 
-## 当前效果判断
-
-当前 A* only 效果已经基本达标：
-
-- 低障碍能 roll-over 时优先 ROLL
-- 可跳低障碍会提前起跳并留出落点余量
-- 高障碍不硬跳，选择 ROLL detour
-- 一条局部路径支持多段跳
-- ROLL 段贴地，JUMP 段抬高
-
-后续重点不应该继续大改 A*，而是验证 `astar_only:=false` 后：
-
-- B-spline 是否把 A* 路径拉进障碍
-- 跳跃落地后是否重新贴地
-- 时间分配是否让跳跃和落地速度可控
-- 控制执行是否能跟踪这条接地点轨迹
-
----
-
-# 当前阶段补充：轨迹可视化、日志降噪与 B-spline 验证
-
-## 本阶段新增内容
-
-这次主要不是继续大改 A*，而是为了进入 `astar_only:=false` 后的完整规划链路验证，补充了调试可视化和运行开关。
-
-新增/调整点：
-
-- 增加完整 B-spline 轨迹显示，避免只看到当前局部控制点或只看到 A* marker
-- 增加局部轨迹/整体轨迹显示开关，保留原来的 `displayOptimalList(...)` 接口
-- B-spline 即使被碰撞检测 reject，也会先显示候选轨迹，方便观察它在哪里撞障碍
-- A* marker id 递增，避免重规划时上一段 A* 路径被覆盖
-- 终端日志降噪：注释掉 A* 详细参数、逐节点 path、逐 decision、优化耗时等刷屏输出
-- 保留 FSM 状态跳转、A* enter/exit、关键错误、碰撞和急停提示
-- 增加 `optimize_direct_astar` 开关，用来对比“保形 direct A* B-spline”和“旧 rebound 优化器”
-
-## 轨迹显示选项
-
-`bend_jump_test.launch` 新增参数：
-
-```bash
-show_local_traj:=true
-show_whole_traj:=true
-whole_traj_sample_step:=0.05
-```
-
-含义：
-
-- `show_local_traj`：显示原来的局部 B-spline 控制点，可用于保留旧接口观察方式
-- `show_whole_traj`：显示按时间采样后的完整 B-spline 曲线
-- `whole_traj_sample_step`：完整轨迹采样间隔，默认 `0.05`
-
-推荐完整规划可视化命令：
+用于快速确认规划是否进入执行状态：
 
 ```bash
 cd ~/workspace/sphere_robot
 source devel/setup.bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true
+roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=false show_whole_traj:=true
 ```
 
-如果最终 B-spline 被 reject，现在也会在 RViz 里显示失败候选轨迹。这样可以观察例如：
+通过标准：
 
 ```text
-final B-spline hits inflated obstacle, reject traj. hit=(-16.85, 0.00, 0.00)
+[FSM]: from WAIT_TARGET to GEN_NEW_TRAJ
+[FSM]: from GEN_NEW_TRAJ to EXEC_TRAJ
 ```
 
-对应的候选 B-spline 到底是在低障碍、膨胀层，还是绕行区域被拉进障碍。
+如果持续出现：
 
-## 日志降噪
+```text
+final B-spline hits inflated obstacle
+```
 
-为了避免终端输出过多，当前已注释掉以下调试信息：
+说明最终 B-spline 仍然没有通过碰撞检查。
+
+### 测试旧 rebound optimizer
+
+仅用于诊断，不建议作为稳定演示：
+
+```bash
+cd ~/workspace/sphere_robot
+source devel/setup.bash
+roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true optimize_direct_astar:=true
+```
+
+当前旧 rebound optimizer 对 ROLL / JUMP 模式理解不足，可能出现内部 A* 修复失败或轨迹模式被破坏。
+
+## 日志说明
+
+为减少终端刷屏，当前已注释掉大量 A* 详细调试输出，包括：
 
 - A* 参数完整打印
-- A* 每个 decision 的详细 roll/jump/detour 代价
+- 每个 decision 的详细代价
 - A* path 每个节点逐行打印
-- jump span、测试障碍插入统计
+- jump span 统计
 - direct A* 初始化细节
-- B-spline 优化阶段的部分耗时/状态打印
-- 周期性 FSM 状态巡检、`wait for goal`、`final_plan_success` 等高频输出
+- B-spline 优化部分耗时输出
 
 当前保留：
 
 - FSM 状态跳转
 - A* enter / exit
 - 关键错误
-- 碰撞 reject 提示
+- 最终碰撞 reject 提示
 - 急停提示
 
-如果后续需要重新打开 A* 细节调试，可以在代码里取消相关 `ROS_INFO/ROS_WARN` 注释，并把 launch 中：
+如果需要重新打开 A* 细节调试，可以把 launch 中：
 
 ```xml
 <param name="/ego_planner_node/planner/debug_decisions" value="false" type="bool"/>
 ```
 
-改回：
+改为：
 
 ```xml
 <param name="/ego_planner_node/planner/debug_decisions" value="true" type="bool"/>
 ```
 
-原来的 `true` 配置已经用 XML 注释保留。
+并取消代码中相关 `ROS_INFO/ROS_WARN` 注释。
 
-## direct A* 与 B-spline 的当前关系
+## 当前已知限制
 
-当前默认行为下，direct A* 初始化路径会跳过旧的 rebound optimizer：
+- direct A* 折线转 B-spline 后，绕障或跳跃过渡处仍可能产生切角。
+- 当前保持最终 B-spline 对 inflated obstacle 的严格检查，因此某些切角候选可能只有红线、没有蓝线。
+- 不建议使用大幅控制点强拉或放宽 inflated shell 检查来修复切角，因为 RViz 中轨迹形状或避障语义会明显变差。
+- 更合理的后续方案是按模式分段生成轨迹：ROLL 段贴地，JUMP 段保留抛物线，ROLL/JUMP 连接处单独做短过渡。
 
-```text
-use_direct_astar_init && !optimize_direct_astar
-```
+## 文档维护约定
 
-因此 RViz 里看到的 B-spline 会和 A* 基本重合。这是有意保留的“保形版本”：
+后续只要修改工程代码、launch 参数、可视化样式或调试策略，都需要同步更新本文档。
 
-- ROLL 段不被后端拉离地面
-- JUMP 段不被后端抹平
-- A* 已经规划出的 roll / jump / detour 结构不被破坏
+每次更新至少说明：
 
-新增参数：
-
-```bash
-optimize_direct_astar:=false
-```
-
-默认 `false`，表示保留 direct A* 轨迹形状。
-
-如果想测试旧 rebound optimizer，可以运行：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true optimize_direct_astar:=true
-```
-
-但当前测试表明，打开后旧 rebound optimizer 会出现：
-
-```text
-[BsplineOptimizer] rebound A* segments: 0, jump segments: 0, traj mode: ROLL
-a star error
-```
-
-这说明旧后端优化器会把球形机器人的 roll/jump 轨迹当作普通飞行轨迹处理，并在内部碰撞修复 A* 阶段失败。目前不适合直接用于球形机器人跳跃轨迹。
-
-## 当前结论
-
-当前可用的稳定路径是：
-
-```bash
-optimize_direct_astar:=false
-```
-
-也就是让 B-spline 尽量保留 A* 的接地点轨迹，先保证 roll / jump / detour 结构正确可视化。
-
-下一步如果要“真正优化 rebound”，不建议直接沿用旧无人机式 rebound optimizer，而是需要为球形机器人增加约束：
-
-- ROLL 控制点保持 `z = astar_height`
-- JUMP 控制点保留抛物线或至少保留跳跃高度
-- 低障碍 roll-over 不应被 inflated obstacle 一律 reject
-- 平滑项不能把轨迹拉进障碍膨胀层
-- rebound 内部 A* 需要理解 ROLL / JUMP / ROLL_OVER 模式，而不是只输出普通 ROLL 段
-
-## 当前推荐测试命令
-
-只看 A*：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=true use_control:=false use_rviz:=true
-```
-
-完整规划可视化，使用保形 direct A* B-spline：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true optimize_direct_astar:=false
-```
-
-测试旧 rebound optimizer 行为：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true optimize_direct_astar:=true
-```
-
-目前第三条主要用于诊断，不建议作为稳定演示命令。
-
+- 实现了什么功能
+- 关键实现方式
+- 如何 launch 验证
+- 当前已知问题
