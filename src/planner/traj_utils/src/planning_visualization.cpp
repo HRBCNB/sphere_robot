@@ -253,9 +253,7 @@ void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> 
     visualization_msgs::Marker clear_old;
     clear_old.header.frame_id = "world";
     clear_old.header.stamp = ros::Time::now();
-    clear_old.ns = "a_star_points";
-    clear_old.action = visualization_msgs::Marker::DELETE;
-    clear_old.id = id;
+    clear_old.action = visualization_msgs::Marker::DELETEALL;
     a_star_list_pub.publish(clear_old);
 
     visualization_msgs::Marker roll_points, jump_points;
@@ -265,8 +263,8 @@ void PlanningVisualization::displayAStarList(std::vector<std::vector<PathNode>> 
     jump_points.ns = "a_star_jump_points";
     roll_points.type = jump_points.type = visualization_msgs::Marker::SPHERE_LIST;
     roll_points.action = jump_points.action = visualization_msgs::Marker::ADD;
-    roll_points.id = id;
-    jump_points.id = id + 1000;
+    roll_points.id = 0;
+    jump_points.id = 1;
     roll_points.pose.orientation.w = jump_points.pose.orientation.w = 1.0;
 
     roll_points.scale.x = 0.080;

@@ -39,6 +39,7 @@
   <arg name="show_local_traj" default="true"/>
   <arg name="show_whole_traj" default="true"/>
   <arg name="whole_traj_sample_step" default="0.05"/>
+  <arg name="enable_periodic_replan" default="true"/>
   <arg name="optimize_direct_astar" default="false"/>
   <arg name="direct_astar_sample_dist" default="0.8"/>
   <arg name="direct_astar_smooth_iter" default="2"/>
@@ -60,6 +61,7 @@
     <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/> <!--always set to 1.5 times grater than sensing horizen-->
     <param name="fsm/planning_horizen_time" value="3" type="double"/>
     <param name="fsm/emergency_time_" value="1.0" type="double"/>
+    <param name="fsm/enable_periodic_replan" value="$(arg enable_periodic_replan)" type="bool"/>
     <param name="visualization/show_local_traj" value="$(arg show_local_traj)" type="bool"/>
     <param name="visualization/show_whole_traj" value="$(arg show_whole_traj)" type="bool"/>
     <param name="visualization/whole_traj_sample_step" value="$(arg whole_traj_sample_step)" type="double"/>

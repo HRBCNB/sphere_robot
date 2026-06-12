@@ -21,6 +21,7 @@ void EGOReplanFSM::init(ros::NodeHandle& nh)
     nh.param("visualization/show_local_traj", show_local_traj_, true);
     nh.param("visualization/show_whole_traj", show_whole_traj_, true);
     nh.param("visualization/whole_traj_sample_step", whole_traj_sample_step_, 0.05);
+    nh.param("fsm/enable_periodic_replan", enable_periodic_replan_, true);
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
@@ -121,7 +122,7 @@ void EGOReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg)
     init_pt_ = odom_pos_;
 
     bool success = false;
-    end_pt_ << msg->poses[0].pose.position.x, msg->poses[0].pose.position.y, 1.0;
+    end_pt_ << msg->poses[0].pose.position.x, msg->poses[0].pose.position.y, msg->poses[0].pose.position.z;
     success = planner_manager_->planGlobalTraj(odom_pos_, odom_vel_, Eigen::Vector3d::Zero(), end_pt_,
                                                Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
 
@@ -288,7 +289,7 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
             {
                 changeFSMExecState(EXEC_TRAJ, "FSM");
             }
-            else
+            else if (enable_periodic_replan_)
             {
                 changeFSMExecState(REPLAN_TRAJ, "FSM");
             }
@@ -325,7 +326,7 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
                 // cout << "near start" << endl;
                 return;
             }
-            else
+            else if (enable_periodic_replan_)
             {
                 changeFSMExecState(REPLAN_TRAJ, "FSM");
             }
@@ -400,7 +401,7 @@ void EGOReplanFSM::checkCollisionCallback(const ros::TimerEvent& e)
                                           // considered valid and will get checked.
             break;
 
-        if (map->getInflateOccupancy(info->position_traj_.evaluateDeBoorT(t)))
+        if (!planner_manager_->isTrajectoryPointSafe(info->position_traj_.evaluateDeBoorT(t)))
         {
             if (planFromCurrentTraj())  // Make a chance
             {

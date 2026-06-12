@@ -294,6 +294,7 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
                 else
                     ++Astar_id;
 
+                if (Astar_id < 0 || Astar_id >= (int)a_star_pathes[i].size()) break;
                 val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law);
 
                 if (val * last_val <= 0 && (abs(val) > 0 || abs(last_val) > 0))  // val = last_val = 0.0 is not allowed
@@ -360,6 +361,7 @@ std::vector<std::vector<PathNode>> BsplineOptimizer::initControlPoints(Eigen::Ma
                 else
                     ++Astar_id;
 
+                if (Astar_id < 0 || Astar_id >= (int)a_star_pathes[i].size()) break;
                 val = (a_star_pathes[i][Astar_id].pos - middle_point).dot(ctrl_pts_law);
 
                 if (val * last_val <= 0 && (abs(val) > 0 || abs(last_val) > 0))  // val = last_val = 0.0 is not allowed
@@ -958,6 +960,7 @@ bool BsplineOptimizer::check_collision_and_rebound(void)
                     else
                         ++Astar_id;
 
+                    if (Astar_id < 0 || Astar_id >= (int)a_star_pathes[i].size()) break;
                     val = (a_star_pathes[i][Astar_id].pos - cps_.points.col(j)).dot(ctrl_pts_law);
 
                     // cout << val << endl;

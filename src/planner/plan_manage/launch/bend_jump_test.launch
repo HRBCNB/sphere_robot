@@ -2,6 +2,7 @@
   <arg name="map_size_x" default="40.0"/>
   <arg name="map_size_y" default="40.0"/>
   <arg name="map_size_z" default="3.0"/>
+  <arg name="planning_horizon" default="7.5"/>
   <arg name="odom_topic" default="/visual_slam/odom"/>
   <arg name="use_rviz" default="false"/>
   <arg name="auto_goal" default="true"/>
@@ -13,6 +14,7 @@
   <arg name="show_local_traj" default="true"/>
   <arg name="show_whole_traj" default="true"/>
   <arg name="whole_traj_sample_step" default="0.05"/>
+  <arg name="enable_periodic_replan" default="false"/>
   <arg name="optimize_direct_astar" default="false"/>
   <arg name="direct_astar_sample_dist" default="0.8"/>
   <arg name="direct_astar_smooth_iter" default="2"/>
@@ -36,12 +38,13 @@
 
     <arg name="max_vel" value="2.0"/>
     <arg name="max_acc" value="3.0"/>
-    <arg name="planning_horizon" value="7.5"/>
+    <arg name="planning_horizon" value="$(arg planning_horizon)"/>
     <arg name="flight_type" value="1"/>
     <arg name="astar_only" value="$(arg astar_only)"/>
     <arg name="show_local_traj" value="$(arg show_local_traj)"/>
     <arg name="show_whole_traj" value="$(arg show_whole_traj)"/>
     <arg name="whole_traj_sample_step" value="$(arg whole_traj_sample_step)"/>
+    <arg name="enable_periodic_replan" value="$(arg enable_periodic_replan)"/>
     <arg name="optimize_direct_astar" value="$(arg optimize_direct_astar)"/>
     <arg name="direct_astar_sample_dist" value="$(arg direct_astar_sample_dist)"/>
     <arg name="direct_astar_smooth_iter" value="$(arg direct_astar_smooth_iter)"/>
@@ -70,9 +73,12 @@
   <param name="/ego_planner_node/manager/astar_test_scene" value="bend" type="str"/>
   <param name="/ego_planner_node/manager/astar_height" value="0.0" type="double"/>
   <param name="/ego_planner_node/planner/max_line_deviation" value="2.0" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_h" value="0.70" type="double"/>
   <param name="/ego_planner_node/planner/jump_penalty" value="6.0" type="double"/>
-  <param name="/ego_planner_node/planner/jump_takeoff_clearance" value="0.30" type="double"/>
-  <param name="/ego_planner_node/planner/jump_landing_clearance" value="0.30" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_d" value="1.8" type="double"/>
+  <param name="/ego_planner_node/planner/jump_takeoff_clearance" value="0.45" type="double"/>
+  <param name="/ego_planner_node/planner/jump_landing_clearance" value="0.50" type="double"/>
+  <param name="/ego_planner_node/planner/jump_vertical_clearance" value="0.16" type="double"/>
   <param name="/ego_planner_node/planner/line_deviation_weight" value="0.5" type="double"/>
   <param name="/ego_planner_node/planner/frontal_jump_cos" value="0.85" type="double"/>
   <param name="/ego_planner_node/planner/jumpable_detour_penalty" value="5.0" type="double"/>

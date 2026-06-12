@@ -42,6 +42,7 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("a_star/jump_penalty", jump_penalty_, 10.0);
     nh.param("a_star/jump_takeoff_clearance", jump_takeoff_clearance_, 0.30);
     nh.param("a_star/jump_landing_clearance", jump_landing_clearance_, 0.30);
+    nh.param("a_star/jump_vertical_clearance", jump_vertical_clearance_, 0.10);
     nh.param("a_star/roll_over_height", roll_over_height_, 0.15);
     nh.param("a_star/roll_over_penalty", roll_over_penalty_, 0.5);
     nh.param("a_star/min_roll_after_jump", min_roll_after_jump_, 0.8);
@@ -60,6 +61,7 @@ void AStar::setJumpParams(ros::NodeHandle& nh)
     nh.param("planner/jump_penalty", jump_penalty_, jump_penalty_);
     nh.param("planner/jump_takeoff_clearance", jump_takeoff_clearance_, jump_takeoff_clearance_);
     nh.param("planner/jump_landing_clearance", jump_landing_clearance_, jump_landing_clearance_);
+    nh.param("planner/jump_vertical_clearance", jump_vertical_clearance_, jump_vertical_clearance_);
     nh.param("planner/roll_over_height", roll_over_height_, roll_over_height_);
     nh.param("planner/roll_over_penalty", roll_over_penalty_, roll_over_penalty_);
     nh.param("planner/min_roll_after_jump", min_roll_after_jump_, min_roll_after_jump_);
@@ -407,19 +409,41 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 return false;
             }
 
-            const double lookahead = std::min(max_jump_d_ - jump_landing_clearance_,
-                                              jump_takeoff_clearance_ + 2.0 * step_size_);
+            const double trigger_lookahead = std::min(max_jump_d_ - jump_landing_clearance_,
+                                                       jump_takeoff_clearance_ + 2.0 * step_size_);
+            const double lookahead = max_jump_d_ - jump_landing_clearance_;
+            bool found_obstacle = false;
+            Eigen::Vector3d first_obstacle_pos = Eigen::Vector3d::Zero();
+            double last_obstacle_dist = 0.0;
+
             for (double dist = step_size_; dist <= lookahead + 1e-6; dist += step_size_)
             {
                 const Eigen::Vector3d scan_pos = current_expand_pos + jump_dir * dist;
                 if (!insideLineCorridor(scan_pos) || !grid_map_->isInMap(scan_pos))
                 {
-                    continue;
+                    break;
                 }
-                if (!checkOccupancy(scan_pos) || canRollOver(scan_pos))
+
+                const bool blocking = checkOccupancy(scan_pos) && !canRollOver(scan_pos);
+                if (!found_obstacle && dist > trigger_lookahead + 1e-6)
                 {
+                    break;
+                }
+                if (!blocking)
+                {
+                    if (found_obstacle)
+                    {
+                        if (dist - last_obstacle_dist >= jump_landing_clearance_)
+                        {
+                            if (obstacle_pos_out) *obstacle_pos_out = first_obstacle_pos;
+                            if (obstacle_dist_out) *obstacle_dist_out = last_obstacle_dist;
+                            return true;
+                        }
+                        break;
+                    }
                     continue;
                 }
+
                 if (!isJumpableObstacle(scan_pos))
                 {
                     return false;
@@ -432,8 +456,19 @@ bool AStar::AstarSearch(const double step_size, Vector3d start_pt, Vector3d end_
                 {
                     return false;
                 }
-                if (obstacle_pos_out) *obstacle_pos_out = scan_pos;
-                if (obstacle_dist_out) *obstacle_dist_out = dist;
+
+                if (!found_obstacle)
+                {
+                    found_obstacle = true;
+                    first_obstacle_pos = scan_pos;
+                }
+                last_obstacle_dist = dist;
+            }
+
+            if (found_obstacle && last_obstacle_dist + jump_landing_clearance_ <= max_jump_d_ + 1e-6)
+            {
+                if (obstacle_pos_out) *obstacle_pos_out = first_obstacle_pos;
+                if (obstacle_dist_out) *obstacle_dist_out = last_obstacle_dist;
                 return true;
             }
             return false;
@@ -788,11 +823,21 @@ bool AStar::isJumpFeasible(const Vector3d& start_pos, const Vector3d& landing_po
             return false;  // 如果路径点超出地图范围，则认为不可行
         }
 
-        // 如果该点在障碍物中，且高度低于跳跃轨迹的高度，则认为碰撞
+        // 如果该点在障碍物中，或水平投影跨过 raw 障碍但高度余量不足，则认为碰撞。
         if (checkJumpOccupancy(check_pos))
         {
             ++jump_fail_arc_occ_;
-            return false;  // 轨迹与障碍物碰撞
+            return false;
+        }
+
+        Eigen::Vector3d ground_check_pos = check_pos;
+        ground_check_pos.z() = std::min(start_z, end_z);
+        const double raw_top = grid_map_->getRawObstacleHeight(ground_check_pos);
+        if (raw_top > ground_check_pos.z() + roll_over_height_ + 1e-3 &&
+            current_h_on_parabola < raw_top + jump_vertical_clearance_)
+        {
+            ++jump_fail_arc_occ_;
+            return false;
         }
     }
 

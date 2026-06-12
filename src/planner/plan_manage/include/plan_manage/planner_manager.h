@@ -40,6 +40,7 @@ class EGOPlannerManager
 
     void initPlanModules(ros::NodeHandle& nh, PlanningVisualization::Ptr vis = NULL);
     bool isAStarOnly() const { return astar_only_; }
+    bool isTrajectoryPointSafe(const Eigen::Vector3d& pos, Eigen::Vector3d* hit_pos = nullptr) const;
 
     PlanParameters pp_;
     LocalTrajData local_data_;
@@ -62,6 +63,7 @@ class EGOPlannerManager
     double astar_wall_y_half_width_{9.0};
     double astar_wall_height_{0.35};
     double roll_over_height_{0.15};
+    double max_jump_h_{0.6};
     bool direct_astar_jump_active_{false};
     double direct_astar_jump_hold_time_{0.0};
     bool optimize_direct_astar_{false};

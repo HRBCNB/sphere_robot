@@ -111,6 +111,7 @@ class AStar
     double jump_penalty_;        // Extra cost for jumping
     double jump_takeoff_clearance_;  // Preferred free distance before a jump obstacle
     double jump_landing_clearance_;  // Preferred free distance after a jump obstacle
+    double jump_vertical_clearance_;  // Required vertical margin above raw obstacle top along the jump arc
     double roll_over_height_;    // Max obstacle top above planning height that can be rolled over
     double roll_over_penalty_;   // Extra cost for rolling over low obstacles
     double min_roll_after_jump_;  // Minimum rolling distance after landing before another jump is allowed
