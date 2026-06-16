@@ -57,6 +57,7 @@ namespace ego_planner
     double planning_horizen_, planning_horizen_time_;
     double emergency_time_;
     bool show_local_traj_, show_whole_traj_;
+    bool enable_local_replan_;
     bool enable_periodic_replan_;
     double whole_traj_sample_step_;
 

@@ -87,6 +87,10 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/direct_astar_smooth_iter", direct_astar_smooth_iter_, 2);
     nh.param("manager/direct_astar_smooth_weight", direct_astar_smooth_weight_, 0.45);
     nh.param("manager/direct_astar_jump_clearance", direct_astar_jump_clearance_, 0.25);
+    nh.param("manager/direct_astar_time_scale", direct_astar_time_scale_, 1.35);
+    nh.param("manager/astar_pool_size_x", astar_pool_size_x_, 100);
+    nh.param("manager/astar_pool_size_y", astar_pool_size_y_, 100);
+    nh.param("manager/astar_pool_size_z", astar_pool_size_z_, 100);
     nh.param("planner/roll_over_height", roll_over_height_, 0.15);
     nh.param("planner/max_jump_h", max_jump_h_, 0.6);
 
@@ -98,7 +102,8 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     bspline_optimizer_rebound_->setParam(nh);
     bspline_optimizer_rebound_->setEnvironment(grid_map_);
     bspline_optimizer_rebound_->a_star_.reset(new AStar);
-    bspline_optimizer_rebound_->a_star_->initGridMap(grid_map_, Eigen::Vector3i(100, 100, 100));
+    bspline_optimizer_rebound_->a_star_->initGridMap(
+        grid_map_, Eigen::Vector3i(astar_pool_size_x_, astar_pool_size_y_, astar_pool_size_z_));
     bspline_optimizer_rebound_->a_star_->setJumpParams(nh);
 
     visualization_ = vis;
@@ -201,6 +206,22 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 add_box(-12.70, -12.10, -2.00, -1.20, 0.0, 0.55);
                 add_box(-10.80, -10.25, 1.15, 1.85, 0.0, 0.40);
                 // ROS_WARN("[EGOPlannerManager] astar_only inserted mixed roll/jump bend test obstacles, voxels=%d", occupied_points);
+            }
+            else if (astar_test_scene_ == "midterm_global")
+            {
+                add_box(-16.80, -16.35, -0.70, 0.70, 0.0, 0.10);
+                add_box(-14.90, -14.50, -0.70, 0.70, 0.0, 0.34);
+                add_box(-15.10, -14.30, 1.00, 1.70, 0.0, 0.75);
+                add_box(-15.10, -14.30, -1.70, -1.00, 0.0, 0.75);
+                add_box(-12.60, -11.70, -0.75, 0.75, 0.0, 1.20);
+                add_box(-12.80, -11.50, 1.20, 2.00, 0.0, 0.75);
+                add_box(-9.75, -9.35, -0.65, 0.65, 0.0, 0.32);
+                add_box(-7.60, -6.95, 0.65, 1.55, 0.0, 0.85);
+                add_box(-7.60, -6.95, -1.55, -0.65, 0.0, 0.85);
+                add_box(-5.45, -5.05, -0.65, 0.65, 0.0, 0.30);
+                add_box(-3.60, -3.15, 1.15, 1.85, 0.0, 0.45);
+                add_box(-2.55, -2.10, -1.85, -1.15, 0.0, 0.45);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted midterm_global demo obstacles, voxels=%d", occupied_points);
             }
             else if (astar_test_scene_ == "detour")
             {
@@ -747,11 +768,11 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     max_sample_gap = std::max(max_sample_gap, (point_set[i] - point_set[i - 1]).norm());
                 }
 
-                // Cubic B-spline derivatives scale roughly with 3*d/dt and 6*d/dt^2.
-                // Direct A* paths, especially jump arcs, need a larger initial interval than flat rolling paths.
-                const double vel_dt = pp_.max_vel_ > 1e-3 ? 3.0 * max_sample_gap / pp_.max_vel_ : ts;
-                const double acc_dt = pp_.max_acc_ > 1e-3 ? std::sqrt(6.0 * max_sample_gap / pp_.max_acc_) : ts;
-                const double direct_astar_ts = std::max(ts, std::max(vel_dt, acc_dt)) * (has_jump ? 2.0 : 1.05);
+                // Start from a moderately aggressive timing. Keep a light acceleration guard so dense A*
+                // samples do not make the trajectory crawl, while still avoiding infeasible jump B-splines.
+                const double vel_dt = pp_.max_vel_ > 1e-3 ? 1.6 * max_sample_gap / pp_.max_vel_ : ts;
+                const double acc_dt = pp_.max_acc_ > 1e-3 ? std::sqrt(2.0 * max_sample_gap / pp_.max_acc_) : ts;
+                const double direct_astar_ts = std::max(ts, std::max(vel_dt, acc_dt)) * (has_jump ? direct_astar_time_scale_ : 1.0);
                 if (direct_astar_ts > ts)
                 {
                     // ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",
@@ -1158,6 +1179,22 @@ void EGOPlannerManager::updateTrajInfo(const UniformBspline& position_traj, cons
     local_data_.acceleration_traj_ = local_data_.velocity_traj_.getDerivative();
     local_data_.start_pos_ = local_data_.position_traj_.evaluateDeBoorT(0.0);
     local_data_.duration_ = local_data_.position_traj_.getTimeSum();
+
+    double max_vel = 0.0;
+    double mean_vel = 0.0;
+    int sample_num = 0;
+    const double dt = std::max(0.02, std::min(0.10, local_data_.duration_ / 200.0));
+    for (double t = 0.0; t <= local_data_.duration_ + 1e-6; t += dt)
+    {
+        const double v = local_data_.velocity_traj_.evaluateDeBoorT(std::min(t, local_data_.duration_)).norm();
+        max_vel = std::max(max_vel, v);
+        mean_vel += v;
+        ++sample_num;
+    }
+    if (sample_num > 0) mean_vel /= static_cast<double>(sample_num);
+    ROS_INFO("[EGOPlannerManager] traj speed stats: duration=%.2fs, mean_vel=%.2fm/s, max_vel=%.2fm/s, limit=%.2fm/s",
+             local_data_.duration_, mean_vel, max_vel, pp_.max_vel_);
+
     local_data_.traj_id_ += 1;
 }
 

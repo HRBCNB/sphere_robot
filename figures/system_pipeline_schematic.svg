@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="820" viewBox="0 0 1500 820">
+  <defs>
+    <marker id="arrow" markerWidth="13" markerHeight="13" refX="11" refY="6.5" orient="auto">
+      <path d="M 0 0 L 13 6.5 L 0 13 z" fill="#2563eb"/>
+    </marker>
+    <filter id="shadow" x="-18%" y="-25%" width="136%" height="150%">
+      <feDropShadow dx="0" dy="7" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.13"/>
+    </filter>
+  </defs>
+
+  <rect width="1500" height="820" fill="#ffffff"/>
+  <text x="750" y="62" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="34" font-weight="700" fill="#111827">球形机器人混合运动规划系统流程</text>
+  <text x="750" y="100" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="19" fill="#475569">局部地图感知 → ROLL/JUMP 混合 A* → 连续轨迹生成 → 碰撞检查与可视化</text>
+
+  <g font-family="Arial, 'Microsoft YaHei', sans-serif" filter="url(#shadow)">
+    <rect x="80" y="190" width="250" height="150" rx="16" fill="#eff6ff" stroke="#60a5fa" stroke-width="3"/>
+    <text x="205" y="232" text-anchor="middle" font-size="24" font-weight="700" fill="#1e3a8a">局部感知地图</text>
+    <text x="205" y="270" text-anchor="middle" font-size="18" fill="#1e40af">/pcl_render_node/cloud</text>
+    <text x="205" y="300" text-anchor="middle" font-size="18" fill="#1e40af">raw / inflated occupancy</text>
+
+    <rect x="430" y="168" width="300" height="195" rx="16" fill="#f8fafc" stroke="#94a3b8" stroke-width="3"/>
+    <text x="580" y="212" text-anchor="middle" font-size="24" font-weight="700" fill="#0f172a">障碍语义判定</text>
+    <text x="580" y="252" text-anchor="middle" font-size="18" fill="#334155">低障碍：ROLL_OVER</text>
+    <text x="580" y="284" text-anchor="middle" font-size="18" fill="#334155">中等障碍：JUMP</text>
+    <text x="580" y="316" text-anchor="middle" font-size="18" fill="#334155">高障碍：DETOUR</text>
+
+    <rect x="830" y="168" width="300" height="195" rx="16" fill="#fefce8" stroke="#facc15" stroke-width="3"/>
+    <text x="980" y="212" text-anchor="middle" font-size="24" font-weight="700" fill="#854d0e">ROLL/JUMP A*</text>
+    <text x="980" y="252" text-anchor="middle" font-size="18" fill="#854d0e">模式节点搜索</text>
+    <text x="980" y="284" text-anchor="middle" font-size="18" fill="#854d0e">起跳/落点安全余量</text>
+    <text x="980" y="316" text-anchor="middle" font-size="18" fill="#854d0e">抛物线高度检查</text>
+
+    <rect x="1190" y="190" width="250" height="150" rx="16" fill="#f0fdf4" stroke="#4ade80" stroke-width="3"/>
+    <text x="1315" y="232" text-anchor="middle" font-size="24" font-weight="700" fill="#166534">离散模式路径</text>
+    <text x="1315" y="270" text-anchor="middle" font-size="18" fill="#166534">ROLL 点</text>
+    <text x="1315" y="300" text-anchor="middle" font-size="18" fill="#166534">JUMP 抛物线点</text>
+
+    <rect x="250" y="520" width="300" height="165" rx="16" fill="#f5f3ff" stroke="#a78bfa" stroke-width="3"/>
+    <text x="400" y="562" text-anchor="middle" font-size="24" font-weight="700" fill="#5b21b6">B-spline 连续化</text>
+    <text x="400" y="602" text-anchor="middle" font-size="18" fill="#5b21b6">ROLL 段轻量平滑</text>
+    <text x="400" y="634" text-anchor="middle" font-size="18" fill="#5b21b6">JUMP 段锚定保形</text>
+
+    <rect x="690" y="520" width="300" height="165" rx="16" fill="#fff1f2" stroke="#fb7185" stroke-width="3"/>
+    <text x="840" y="562" text-anchor="middle" font-size="24" font-weight="700" fill="#9f1239">最终碰撞检查</text>
+    <text x="840" y="602" text-anchor="middle" font-size="18" fill="#9f1239">raw obstacle 不可进入</text>
+    <text x="840" y="634" text-anchor="middle" font-size="18" fill="#9f1239">低障碍滚越/跳跃语义放行</text>
+
+    <rect x="1130" y="520" width="250" height="165" rx="16" fill="#ecfeff" stroke="#22d3ee" stroke-width="3"/>
+    <text x="1255" y="562" text-anchor="middle" font-size="24" font-weight="700" fill="#155e75">RViz 可视化</text>
+    <text x="1255" y="602" text-anchor="middle" font-size="18" fill="#155e75">A* 点</text>
+    <text x="1255" y="634" text-anchor="middle" font-size="18" fill="#155e75">最终/失败轨迹</text>
+  </g>
+
+  <g fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" marker-end="url(#arrow)">
+    <path d="M 330 265 L 420 265"/>
+    <path d="M 730 265 L 820 265"/>
+    <path d="M 1130 265 L 1180 265"/>
+    <path d="M 1315 340 C 1315 430, 400 430, 400 510"/>
+    <path d="M 550 602 L 680 602"/>
+    <path d="M 990 602 L 1120 602"/>
+  </g>
+
+  <g font-family="Arial, 'Microsoft YaHei', sans-serif">
+    <rect x="82" y="420" width="260" height="72" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="212" y="449" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">关键输入参数</text>
+    <text x="212" y="476" text-anchor="middle" font-size="16" fill="#475569">roll_over_height, max_jump_h, max_jump_d</text>
+
+    <rect x="1065" y="420" width="350" height="72" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="1240" y="449" text-anchor="middle" font-size="18" font-weight="700" fill="#334155">输出结果</text>
+    <text x="1240" y="476" text-anchor="middle" font-size="16" fill="#475569">可执行 B-spline 轨迹与模式可视化</text>
+  </g>
+
+  <text x="750" y="760" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="17" fill="#64748b">说明：静态演示时 RViz 可显示全局障碍，但 planner 使用局部感知地图进行规划。</text>
+</svg>

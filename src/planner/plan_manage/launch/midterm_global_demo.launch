@@ -1,14 +1,14 @@
 <launch>
-  <arg name="map_size_x" default="40.0"/>
-  <arg name="map_size_y" default="40.0"/>
+  <arg name="map_size_x" default="44.0"/>
+  <arg name="map_size_y" default="18.0"/>
   <arg name="map_size_z" default="3.0"/>
-  <arg name="planning_horizon" default="7.5"/>
+  <arg name="planning_horizon" default="18.5"/>
   <arg name="odom_topic" default="/visual_slam/odom"/>
   <arg name="use_rviz" default="false"/>
   <arg name="auto_goal" default="true"/>
-  <arg name="astar_only" default="true"/>
+  <arg name="astar_only" default="false"/>
   <arg name="use_control" default="false"/>
-  <arg name="goal_x" default="15.0"/>
+  <arg name="goal_x" default="0.0"/>
   <arg name="goal_y" default="0.0"/>
   <arg name="goal_z" default="0.0"/>
   <arg name="show_local_traj" default="true"/>
@@ -21,7 +21,17 @@
   <arg name="direct_astar_smooth_iter" default="2"/>
   <arg name="direct_astar_smooth_weight" default="0.45"/>
   <arg name="direct_astar_jump_clearance" default="0.25"/>
-  <arg name="direct_astar_time_scale" default="1.35"/>
+  <arg name="direct_astar_time_scale" default="1.10"/>
+  <arg name="max_vel" default="3.6"/>
+  <arg name="max_acc" default="5.5"/>
+  <arg name="sensing_horizon" default="22.0"/>
+  <arg name="local_update_range_x" default="22.0"/>
+  <arg name="local_update_range_y" default="9.0"/>
+  <arg name="local_update_range_z" default="4.5"/>
+  <arg name="max_ray_length" default="22.0"/>
+  <arg name="astar_pool_size_x" default="240"/>
+  <arg name="astar_pool_size_y" default="140"/>
+  <arg name="astar_pool_size_z" default="50"/>
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -38,8 +48,8 @@
     <arg name="fx" value="387.229248046875"/>
     <arg name="fy" value="387.229248046875"/>
 
-    <arg name="max_vel" value="3.0"/>
-    <arg name="max_acc" value="4.5"/>
+    <arg name="max_vel" value="$(arg max_vel)"/>
+    <arg name="max_acc" value="$(arg max_acc)"/>
     <arg name="planning_horizon" value="$(arg planning_horizon)"/>
     <arg name="flight_type" value="1"/>
     <arg name="astar_only" value="$(arg astar_only)"/>
@@ -54,11 +64,18 @@
     <arg name="direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)"/>
     <arg name="direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)"/>
     <arg name="direct_astar_time_scale" value="$(arg direct_astar_time_scale)"/>
+    <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
+    <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
+    <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>
+    <arg name="max_ray_length" value="$(arg max_ray_length)"/>
+    <arg name="astar_pool_size_x" value="$(arg astar_pool_size_x)"/>
+    <arg name="astar_pool_size_y" value="$(arg astar_pool_size_y)"/>
+    <arg name="astar_pool_size_z" value="$(arg astar_pool_size_z)"/>
 
     <arg name="point_num" value="1"/>
-    <arg name="point0_x" value="15.0"/>
-    <arg name="point0_y" value="0.0"/>
-    <arg name="point0_z" value="0.0"/>
+    <arg name="point0_x" value="$(arg goal_x)"/>
+    <arg name="point0_y" value="$(arg goal_y)"/>
+    <arg name="point0_z" value="$(arg goal_z)"/>
     <arg name="point1_x" value="0.0"/>
     <arg name="point1_y" value="0.0"/>
     <arg name="point1_z" value="1.0"/>
@@ -74,22 +91,20 @@
   </include>
 
   <param name="/ego_planner_node/manager/astar_test_wall" value="true" type="bool"/>
-  <param name="/ego_planner_node/manager/astar_test_scene" value="bend" type="str"/>
+  <param name="/ego_planner_node/manager/astar_test_scene" value="midterm_global" type="str"/>
   <param name="/ego_planner_node/manager/astar_height" value="0.0" type="double"/>
-  <param name="/ego_planner_node/planner/max_line_deviation" value="2.0" type="double"/>
-  <param name="/ego_planner_node/planner/max_jump_h" value="0.70" type="double"/>
-  <param name="/ego_planner_node/planner/jump_penalty" value="6.0" type="double"/>
-  <param name="/ego_planner_node/planner/max_jump_d" value="1.8" type="double"/>
+  <param name="/ego_planner_node/planner/max_line_deviation" value="2.6" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_h" value="0.72" type="double"/>
+  <param name="/ego_planner_node/planner/jump_penalty" value="5.5" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_d" value="2.0" type="double"/>
   <param name="/ego_planner_node/planner/jump_takeoff_clearance" value="0.45" type="double"/>
   <param name="/ego_planner_node/planner/jump_landing_clearance" value="0.50" type="double"/>
   <param name="/ego_planner_node/planner/jump_vertical_clearance" value="0.16" type="double"/>
-  <param name="/ego_planner_node/planner/line_deviation_weight" value="0.5" type="double"/>
-  <param name="/ego_planner_node/planner/frontal_jump_cos" value="0.85" type="double"/>
+  <param name="/ego_planner_node/planner/line_deviation_weight" value="0.45" type="double"/>
+  <param name="/ego_planner_node/planner/frontal_jump_cos" value="0.80" type="double"/>
   <param name="/ego_planner_node/planner/jumpable_detour_penalty" value="5.0" type="double"/>
   <param name="/ego_planner_node/planner/roll_over_height" value="0.15" type="double"/>
   <param name="/ego_planner_node/planner/roll_over_penalty" value="0.5" type="double"/>
-  <!-- <param name="/ego_planner_node/planner/debug_decisions" value="true" type="bool"/> -->
-
   <param name="/ego_planner_node/planner/debug_decisions" value="false" type="bool"/>
   <param name="/ego_planner_node/planner/debug_decision_limit" value="120" type="int"/>
   <param name="/ego_planner_node/planner/use_inflate_for_jump" value="false" type="bool"/>
@@ -115,7 +130,8 @@
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
     <arg name="use_control" value="$(arg use_control)"/>
-    <arg name="obstacle_scenario" value="bend"/>
+    <arg name="obstacle_scenario" value="midterm_global"/>
+    <arg name="sensing_horizon" value="$(arg sensing_horizon)"/>
   </include>
 
   <group if="$(arg auto_goal)">

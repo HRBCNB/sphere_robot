@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="760" viewBox="0 0 1400 760">
+  <defs>
+    <marker id="arrow-blue" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto">
+      <path d="M 0 0 L 14 7 L 0 14 z" fill="#1f66ff"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#4b5563"/>
+    </marker>
+    <filter id="soft-shadow" x="-20%" y="-30%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="5" flood-color="#111827" flood-opacity="0.16"/>
+    </filter>
+    <linearGradient id="ground-grad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#eef2ff"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1400" height="760" fill="#ffffff"/>
+  <text x="700" y="58" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="34" font-weight="700" fill="#111827">球形机器人滚动/跳跃/绕行混合规划示意图</text>
+  <text x="700" y="96" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="19" fill="#4b5563">根据障碍高度和跳跃能力，在 ROLL、JUMP 与 DETOUR 之间自动切换</text>
+
+  <rect x="90" y="595" width="1220" height="38" rx="8" fill="url(#ground-grad)" stroke="#cbd5e1"/>
+  <line x1="90" y1="614" x2="1310" y2="614" stroke="#94a3b8" stroke-width="2"/>
+
+  <!-- obstacles -->
+  <g filter="url(#soft-shadow)">
+    <rect x="250" y="545" width="112" height="50" rx="4" fill="#22c55e" stroke="#15803d" stroke-width="3"/>
+    <rect x="573" y="420" width="84" height="175" rx="4" fill="#f97316" stroke="#c2410c" stroke-width="3"/>
+    <rect x="925" y="285" width="130" height="310" rx="4" fill="#ef4444" stroke="#991b1b" stroke-width="3"/>
+  </g>
+
+  <text x="306" y="674" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="22" font-weight="700" fill="#15803d">低障碍</text>
+  <text x="306" y="704" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="18" fill="#166534">ROLL_OVER</text>
+
+  <text x="615" y="674" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="22" font-weight="700" fill="#c2410c">可跳障碍</text>
+  <text x="615" y="704" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="18" fill="#9a3412">JUMP</text>
+
+  <text x="990" y="674" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="22" font-weight="700" fill="#991b1b">高障碍</text>
+  <text x="990" y="704" text-anchor="middle" font-family="Arial, 'Microsoft YaHei', sans-serif"
+        font-size="18" fill="#7f1d1d">DETOUR</text>
+
+  <!-- robot positions -->
+  <g>
+    <circle cx="145" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="215" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="300" cy="530" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="392" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+
+    <circle cx="470" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="548" cy="486" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="615" cy="356" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="690" cy="486" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="770" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+
+    <circle cx="850" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="900" cy="482" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="990" cy="230" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4" opacity="0.28"/>
+    <circle cx="1090" cy="482" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="1165" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+    <circle cx="1250" cy="574" r="24" fill="#0ea5e9" stroke="#075985" stroke-width="4"/>
+  </g>
+
+  <!-- paths -->
+  <path d="M 120 574 C 190 574, 228 574, 260 548 C 283 530, 319 530, 345 550 C 370 569, 398 574, 430 574"
+        fill="none" stroke="#2563eb" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+  <path d="M 450 574 C 520 550, 540 430, 615 355 C 690 430, 705 550, 790 574"
+        fill="none" stroke="#2563eb" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+  <path d="M 830 574 C 870 520, 890 455, 910 385 C 937 288, 960 242, 990 230 C 1020 242, 1042 288, 1070 385 C 1090 455, 1110 520, 1190 574"
+        fill="none" stroke="#9ca3af" stroke-width="7" stroke-dasharray="16 13" stroke-linecap="round"/>
+  <path d="M 830 574 C 845 482, 885 430, 925 412 M 1055 412 C 1100 432, 1128 494, 1190 574"
+        fill="none" stroke="#2563eb" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow-blue)"/>
+
+  <!-- labels -->
+  <g font-family="Arial, 'Microsoft YaHei', sans-serif">
+    <rect x="166" y="405" width="250" height="84" rx="12" fill="#ecfdf5" stroke="#86efac"/>
+    <text x="291" y="438" text-anchor="middle" font-size="22" font-weight="700" fill="#166534">ROLL 滚动通过</text>
+    <text x="291" y="468" text-anchor="middle" font-size="18" fill="#166534">h ≤ roll_over_height</text>
+
+    <rect x="472" y="175" width="290" height="94" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+    <text x="617" y="210" text-anchor="middle" font-size="22" font-weight="700" fill="#9a3412">JUMP 抛物线越障</text>
+    <text x="617" y="240" text-anchor="middle" font-size="18" fill="#9a3412">roll_over_height &lt; h ≤ max_jump_h</text>
+
+    <rect x="870" y="120" width="265" height="98" rx="12" fill="#fef2f2" stroke="#fca5a5"/>
+    <text x="1002" y="155" text-anchor="middle" font-size="22" font-weight="700" fill="#991b1b">DETOUR 绕行</text>
+    <text x="1002" y="185" text-anchor="middle" font-size="18" fill="#991b1b">h &gt; max_jump_h</text>
+  </g>
+
+  <line x1="990" y1="230" x2="990" y2="285" stroke="#ef4444" stroke-width="3" stroke-dasharray="8 8"/>
+  <text x="1010" y="255" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="17" fill="#7f1d1d">不可跳高度</text>
+
+  <text x="95" y="140" font-family="Arial, 'Microsoft YaHei', sans-serif" font-size="18" fill="#64748b">
+    注：圆点表示球形机器人规划位置；蓝线为连续轨迹示意。
+  </text>
+</svg>

@@ -22,6 +22,7 @@ void EGOReplanFSM::init(ros::NodeHandle& nh)
     nh.param("visualization/show_whole_traj", show_whole_traj_, true);
     nh.param("visualization/whole_traj_sample_step", whole_traj_sample_step_, 0.05);
     nh.param("fsm/enable_periodic_replan", enable_periodic_replan_, true);
+    nh.param("fsm/enable_local_replan", enable_local_replan_, enable_periodic_replan_);
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
@@ -146,8 +147,10 @@ void EGOReplanFSM::waypointCallback(const nav_msgs::PathConstPtr& msg)
         /*** FSM ***/
         if (exec_state_ == WAIT_TARGET)
             changeFSMExecState(GEN_NEW_TRAJ, "TRIG");
-        else if (exec_state_ == EXEC_TRAJ)
+        else if (exec_state_ == EXEC_TRAJ && enable_local_replan_)
             changeFSMExecState(REPLAN_TRAJ, "TRIG");
+        else if (exec_state_ == EXEC_TRAJ)
+            ROS_WARN("[EGOReplanFSM] local replan is disabled; ignore new waypoint during fixed trajectory execution.");
 
         // visualization_->displayGoalPoint(end_pt_, Eigen::Vector4d(1, 0, 0, 1), 0.3, 0);
         visualization_->displayGlobalPathList(gloabl_traj, 0.1, 0);
@@ -289,7 +292,7 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
             {
                 changeFSMExecState(EXEC_TRAJ, "FSM");
             }
-            else if (enable_periodic_replan_)
+            else if (enable_local_replan_)
             {
                 changeFSMExecState(REPLAN_TRAJ, "FSM");
             }
@@ -326,7 +329,7 @@ void EGOReplanFSM::execFSMCallback(const ros::TimerEvent& e)
                 // cout << "near start" << endl;
                 return;
             }
-            else if (enable_periodic_replan_)
+            else if (enable_local_replan_ && enable_periodic_replan_)
             {
                 changeFSMExecState(REPLAN_TRAJ, "FSM");
             }
@@ -403,16 +406,17 @@ void EGOReplanFSM::checkCollisionCallback(const ros::TimerEvent& e)
 
         if (!planner_manager_->isTrajectoryPointSafe(info->position_traj_.evaluateDeBoorT(t)))
         {
-            if (planFromCurrentTraj())  // Make a chance
+            if (enable_local_replan_ && planFromCurrentTraj())  // Make a chance
             {
                 changeFSMExecState(EXEC_TRAJ, "SAFETY");
                 return;
             }
             else
             {
-                if (t - t_cur < emergency_time_)  // 0.8s of emergency time
+                if (t - t_cur < emergency_time_ || !enable_local_replan_)  // 0.8s of emergency time
                 {
-                    ROS_WARN("Suddenly discovered obstacles. emergency stop! time=%f", t - t_cur);
+                    ROS_WARN("Suddenly discovered obstacles. emergency stop! time=%f, local_replan=%s",
+                             t - t_cur, enable_local_replan_ ? "true" : "false");
                     changeFSMExecState(EMERGENCY_STOP, "SAFETY");
                 }
                 else

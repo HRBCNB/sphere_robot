@@ -39,12 +39,21 @@
   <arg name="show_local_traj" default="true"/>
   <arg name="show_whole_traj" default="true"/>
   <arg name="whole_traj_sample_step" default="0.05"/>
-  <arg name="enable_periodic_replan" default="true"/>
+  <arg name="enable_local_replan" default="false"/>
+  <arg name="enable_periodic_replan" default="false"/>
   <arg name="optimize_direct_astar" default="false"/>
   <arg name="direct_astar_sample_dist" default="0.8"/>
   <arg name="direct_astar_smooth_iter" default="2"/>
   <arg name="direct_astar_smooth_weight" default="0.45"/>
   <arg name="direct_astar_jump_clearance" default="0.25"/>
+  <arg name="direct_astar_time_scale" default="1.35"/>
+  <arg name="local_update_range_x" default="5.5"/>
+  <arg name="local_update_range_y" default="5.5"/>
+  <arg name="local_update_range_z" default="4.5"/>
+  <arg name="max_ray_length" default="4.5"/>
+  <arg name="astar_pool_size_x" default="100"/>
+  <arg name="astar_pool_size_y" default="100"/>
+  <arg name="astar_pool_size_z" default="100"/>
 
   <!-- main node -->
   <node pkg="ego_planner" name="ego_planner_node" type="ego_planner_node" output="screen">
@@ -61,6 +70,7 @@
     <param name="fsm/planning_horizon" value="$(arg planning_horizon)" type="double"/> <!--always set to 1.5 times grater than sensing horizen-->
     <param name="fsm/planning_horizen_time" value="3" type="double"/>
     <param name="fsm/emergency_time_" value="1.0" type="double"/>
+    <param name="fsm/enable_local_replan" value="$(arg enable_local_replan)" type="bool"/>
     <param name="fsm/enable_periodic_replan" value="$(arg enable_periodic_replan)" type="bool"/>
     <param name="visualization/show_local_traj" value="$(arg show_local_traj)" type="bool"/>
     <param name="visualization/show_whole_traj" value="$(arg show_whole_traj)" type="bool"/>
@@ -87,9 +97,9 @@
     <param name="grid_map/map_size_x"   value="$(arg map_size_x_)" /> 
     <param name="grid_map/map_size_y"   value="$(arg map_size_y_)" /> 
     <param name="grid_map/map_size_z"   value="$(arg map_size_z_)" /> 
-    <param name="grid_map/local_update_range_x"  value="5.5" /> 
-    <param name="grid_map/local_update_range_y"  value="5.5" /> 
-    <param name="grid_map/local_update_range_z"  value="4.5" /> 
+    <param name="grid_map/local_update_range_x"  value="$(arg local_update_range_x)" /> 
+    <param name="grid_map/local_update_range_y"  value="$(arg local_update_range_y)" /> 
+    <param name="grid_map/local_update_range_z"  value="$(arg local_update_range_z)" /> 
     <param name="grid_map/obstacles_inflation"     value="0.099" /> 
     <param name="grid_map/local_map_margin" value="30"/>
     <param name="grid_map/ground_height"        value="-0.01"/>
@@ -113,7 +123,7 @@
     <param name="grid_map/p_max"  value="0.90"/>
     <param name="grid_map/p_occ"  value="0.80"/>
     <param name="grid_map/min_ray_length" value="0.1"/>
-    <param name="grid_map/max_ray_length" value="4.5"/>
+    <param name="grid_map/max_ray_length" value="$(arg max_ray_length)"/>
 
     <param name="grid_map/virtual_ceil_height"   value="2.5"/>
     <param name="grid_map/visualization_truncate_height"   value="2.4"/>
@@ -151,6 +161,10 @@
     <param name="manager/direct_astar_smooth_iter" value="$(arg direct_astar_smooth_iter)" type="int"/>
     <param name="manager/direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)" type="double"/>
     <param name="manager/direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)" type="double"/>
+    <param name="manager/direct_astar_time_scale" value="$(arg direct_astar_time_scale)" type="double"/>
+    <param name="manager/astar_pool_size_x" value="$(arg astar_pool_size_x)" type="int"/>
+    <param name="manager/astar_pool_size_y" value="$(arg astar_pool_size_y)" type="int"/>
+    <param name="manager/astar_pool_size_z" value="$(arg astar_pool_size_z)" type="int"/>
 
   <!-- trajectory optimization -->
     <param name="optimization/lambda_smooth" value="1.0" type="double"/>

@@ -167,12 +167,13 @@ show_local_traj:=true
 show_whole_traj:=true
 whole_traj_sample_step:=0.05
 planning_horizon:=7.5
-enable_periodic_replan:=false
+enable_local_replan:=false enable_periodic_replan:=false
 optimize_direct_astar:=false
 direct_astar_sample_dist:=0.8
 direct_astar_smooth_iter:=2
 direct_astar_smooth_weight:=0.45
 direct_astar_jump_clearance:=0.25
+direct_astar_time_scale:=1.35
 ```
 
 含义：
@@ -181,13 +182,28 @@ direct_astar_jump_clearance:=0.25
 - `show_local_traj`：显示局部控制点/局部轨迹
 - `show_whole_traj`：显示完整 B-spline 采样轨迹
 - `whole_traj_sample_step`：完整轨迹采样间隔
-- `planning_horizon`：局部规划视距；bend 静态演示默认 `7.5`，不要为了显示全程强行设到很大，否则 A* 可能超出局部搜索池
-- `enable_periodic_replan`：是否在执行过程中按 EGO 原始逻辑周期性局部重规划；bend 静态演示默认关闭，避免终端反复刷 `EXEC_TRAJ / REPLAN_TRAJ`
+- `planning_horizon`：单次规划视距；`midterm_global_demo.launch` 默认 `18.5`，并配合更大的 `astar_pool_size_*` 搜索池使用
+- `enable_local_replan`：局部重规划总开关；中期固定轨迹演示默认关闭，后续要展示在线局部重规划时再打开
+- `enable_periodic_replan`：周期触发重规划开关；只有 `enable_local_replan=true` 时才会生效
 - `optimize_direct_astar`：是否打开旧 rebound optimizer，默认不建议打开
 - `direct_astar_sample_dist`：direct A* 路径转 B-spline 前的基础采样距离；实际 B-spline 输入会对 ROLL/JUMP 再做保护采样上限
 - `direct_astar_smooth_iter`：direct A* ROLL 点轻量平滑迭代次数
 - `direct_astar_smooth_weight`：direct A* ROLL 点轻量平滑权重
 - `direct_astar_jump_clearance`：A* 生成 JUMP 抛物线时相对障碍顶部保留的基础高度余量；当前 B-spline 转换不再额外抬高 JUMP 段
+- `direct_astar_time_scale`：direct A* 转 B-spline 时的时间放大系数；包含 JUMP 时默认 `1.35`，`midterm_global_demo.launch` 为了展示速度使用 `1.25`；值越大执行越慢但越保守，值越小轨迹更快但更容易速度/加速度超限
+- `astar_pool_size_x/y/z`：A* 搜索池尺寸。默认小场景为 `100/100/100`；中期大地图使用 `240/140/50`，用于支持约 18 m 的一次性固定轨迹搜索
+
+### 固定轨迹执行速度
+
+中期推荐的 `midterm_global_demo.launch` 为固定轨迹跟踪演示使用的默认速度参数为：
+
+```text
+manager/max_vel = 3.0
+manager/max_acc = 4.5
+direct_astar_time_scale = 1.25
+```
+
+如果机器人执行仍然太慢，优先调大 `max_vel` 和 `max_acc`；如果包含 JUMP 的轨迹整体被拉得过慢，再小幅降低 `direct_astar_time_scale`。不建议一次降得太多，因为最终 B-spline 仍需要满足速度和加速度可行性检查。
 
 ### 规划参数
 
@@ -264,6 +280,53 @@ roslaunch ego_planner bend_jump_test.launch astar_only:=true use_control:=false 
 - 高障碍是否绕行
 - JUMP 起跳和落点是否留有安全距离
 
+### 中期大地图固定轨迹展示场景
+
+`midterm_global_demo.launch` 是当前中期推荐入口。它按“飞机/机器人开局已知完整静态地图、固定终点、一次规划、无周期重规划”的口径配置。默认起点由仿真器给出：
+
+```text
+start = (-18.0, 0.0, 0.0)
+goal  = (0.0, 0.0, 0.0)
+```
+
+地图长度约 18 m，障碍从左到右分成几个清晰阶段：
+
+1. 极低宽障碍：展示 `ROLL_OVER`，机器人保持滚动通过。
+2. 低跳墙和两侧护栏：展示正向 `JUMP`，A* 点中会出现橙红色跳跃段。
+3. 中央高障碍：高度超过 `max_jump_h`，展示绕行而不是强行跳跃。
+4. 绕行后短低墙：展示回到主线后的第二次 `JUMP`。
+5. 窄通道和侧向视觉障碍：增强场景层次，同时不堵死主通道。
+
+为了支持这张大地图一次性规划，`midterm_global_demo.launch` 将 A* 搜索池从默认 `100 x 100 x 100` 提高到：
+
+```text
+astar_pool_size_x = 240
+astar_pool_size_y = 140
+astar_pool_size_z = 50
+```
+
+推荐静态轨迹演示命令：
+
+```bash
+cd ~/workspace/sphere_robot
+source devel/setup.bash
+roslaunch ego_planner midterm_global_demo.launch use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true enable_local_replan:=false enable_periodic_replan:=false
+```
+
+推荐固定轨迹跟踪演示命令：
+
+```bash
+roslaunch ego_planner midterm_global_demo.launch astar_only:=false use_control:=true use_rviz:=true show_whole_traj:=true enable_local_replan:=false enable_periodic_replan:=false
+```
+
+如果只想看 A* 决策，不看 B-spline：
+
+```bash
+roslaunch ego_planner midterm_global_demo.launch astar_only:=true use_control:=false use_rviz:=true
+```
+
+观察重点：低障碍直接滚越、低墙跳跃、高墙绕行、绕行后再次跳跃。这个场景就是中期用于展示的“大一点的已知地图一次性轨迹”。
+
 ### 完整规划 RViz 验证
 
 用于验证 A* 转 B-spline 后是否能发布最终轨迹：
@@ -271,7 +334,7 @@ roslaunch ego_planner bend_jump_test.launch astar_only:=true use_control:=false 
 ```bash
 cd ~/workspace/sphere_robot
 source devel/setup.bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true planning_horizon:=7.5 enable_periodic_replan:=false optimize_direct_astar:=false
+roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=true show_local_traj:=true show_whole_traj:=true planning_horizon:=7.5 enable_local_replan:=false enable_periodic_replan:=false optimize_direct_astar:=false
 ```
 
 观察重点：
@@ -289,7 +352,7 @@ roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false
 ```bash
 cd ~/workspace/sphere_robot
 source devel/setup.bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=false show_whole_traj:=true planning_horizon:=7.5 enable_periodic_replan:=false
+roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false use_rviz:=false show_whole_traj:=true planning_horizon:=7.5 enable_local_replan:=false enable_periodic_replan:=false
 ```
 
 通过标准：
@@ -322,42 +385,31 @@ roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=false
 
 ### 目标点和规划视距
 
-RViz 里的青绿色球是全局目标点。之前手动目标回调会把目标 z 强制写成 `1.0`，所以目标球会漂在空中；现在目标 z 使用消息里的值，bend 固定目标默认是 `goal_z:=0.0`。
+RViz 里的青绿色球是目标点。之前手动目标回调会把目标 z 强制写成 `1.0`，所以目标球会漂在空中；现在目标 z 使用消息里的值，`midterm_global_demo.launch` 默认是 `goal_z:=0.0`。
 
-`show_whole_traj` 显示的是当前发布的 B-spline 轨迹，不是自动把未来多次局部重规划结果拼起来。
+中期展示不使用在线重规划。`midterm_global_demo.launch` 将起点设为 `(-18.0, 0.0, 0.0)`，终点设为 `(0.0, 0.0, 0.0)`，`planning_horizon=18.5`，并增大 A* 搜索池，保证目标点位于一次规划范围内。
 
-在 `enable_periodic_replan:=false` 时，只会显示从当前位置到局部目标的一段轨迹，后续到全局目标的轨迹不会继续生成。不要把 `planning_horizon` 直接改到几十米来强行显示全程；当前 A* 节点池是局部搜索池，目标太远会出现类似 `Ran out of pool, index=...` 的错误。
-
-如果想看到后续轨迹，需要打开在线滚动重规划，让机器人或仿真里程计沿轨迹前进后继续规划下一段：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=true planning_horizon:=7.5 enable_periodic_replan:=true
-```
+`show_whole_traj` 显示的是当前一次性发布的 B-spline 轨迹。不要把远处目标直接设到几十米外再关闭重规划，否则系统只能规划到局部目标，甚至可能出现 `Ran out of pool, index=...`。如果后续要做更长路线，应扩展搜索池或设计分段轨迹，而不是在中期展示里打开周期重规划。
 
 ### 周期重规划说明
 
 EGO 原始 FSM 在 `EXEC_TRAJ` 中会根据当前执行时间自动切到 `REPLAN_TRAJ`，用于真实机器人或闭环仿真中的在线局部重规划。
 
-当前 bend 静态演示默认：
+当前固定轨迹演示默认：
 
 ```text
+enable_local_replan = false
 enable_periodic_replan = false
 ```
 
-这个开关直接控制 `EXEC_TRAJ` 状态中按时间触发的周期重规划。关闭后，规划成功会保持当前发布轨迹，不会因为时间推进反复刷：
+`enable_local_replan` 是总开关，关闭后新目标触发、周期触发和安全检查触发的局部重规划都会被挡住。`enable_periodic_replan` 只控制按时间周期触发的那一路。当前中期展示两个都关闭，规划成功后会保持当前发布轨迹，不会因为时间推进反复刷：
 
 ```text
 [FSM]: from EXEC_TRAJ to REPLAN_TRAJ
 [FSM]: from REPLAN_TRAJ to EXEC_TRAJ
 ```
 
-如果后续接入真实控制或希望测试在线滚动重规划，可以在 launch 时打开：
-
-```bash
-roslaunch ego_planner bend_jump_test.launch astar_only:=false use_control:=true enable_periodic_replan:=true
-```
-
-Safety 轨迹检查已经改为复用最终发布前的碰撞语义：JUMP 允许越过可跳低障碍的 inflated shell，但不能进入 raw 实体障碍。
+中期展示保持 `enable_local_replan=false`、`enable_periodic_replan=false`。Safety 轨迹检查仍会检测风险；如果局部重规划关闭，遇到突发碰撞风险会进入急停而不是切到 `REPLAN_TRAJ`。
 
 ## 日志说明
 
