@@ -1,0 +1,38 @@
+<launch>
+  <!-- 中期跟踪展示专用：只展示 ROLL/绕障跟踪，不展示 JUMP 冲量段。 -->
+  <include file="$(find ego_planner)/launch/midterm_global_demo.launch">
+    <arg name="use_rviz" value="true"/>
+    <arg name="use_control" value="true"/>
+    <arg name="auto_goal" value="true"/>
+    <arg name="astar_only" value="false"/>
+    <arg name="show_local_traj" value="true"/>
+    <arg name="show_whole_traj" value="true"/>
+    <arg name="enable_local_replan" value="false"/>
+    <arg name="enable_periodic_replan" value="false"/>
+    <arg name="optimize_direct_astar" value="false"/>
+
+    <!-- 跟踪图只验证 ROLL 绕障控制接口，目标缩短到 detour 场景后方，避免展示时间过长。 -->
+    <arg name="goal_x" value="-10.0"/>
+    <arg name="goal_y" value="0.0"/>
+    <arg name="goal_z" value="0.0"/>
+
+    <!-- 跟踪展示时使用真实样条时间，不做额外播放加速。 -->
+    <arg name="traj_server_physical_time_scale" value="1.0"/>
+
+    <!-- 使用更适合跟踪验证的绕障场景，避开 midterm_global 中逼迫跳跃的窄通道。 -->
+    <arg name="astar_test_scene" value="roll_tracking"/>
+    <arg name="obstacle_scenario" value="roll_tracking"/>
+
+    <!-- 禁用 JUMP 选择，让 A* 通过 ROLL 绕行/滚动生成连续可跟踪轨迹。 -->
+    <arg name="max_jump_h" value="0.0"/>
+    <arg name="max_jump_d" value="0.0"/>
+    <arg name="jump_penalty" value="999.0"/>
+    <arg name="direct_astar_allow_jump_impulse" value="false"/>
+    <arg name="direct_astar_time_realloc_max_iter" value="1"/>
+
+    <!-- ROLL-only 下允许更充分绕行，避免为了贴近直线而擦障。 -->
+    <arg name="max_line_deviation" value="2.5"/>
+    <arg name="jumpable_detour_penalty" value="0.0"/>
+    <arg name="line_deviation_weight" value="1.2"/>
+  </include>
+</launch>

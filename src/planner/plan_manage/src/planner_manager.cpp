@@ -88,8 +88,18 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/direct_astar_smooth_weight", direct_astar_smooth_weight_, 0.45);
     nh.param("manager/direct_astar_jump_clearance", direct_astar_jump_clearance_, 0.25);
     nh.param("manager/direct_astar_time_scale", direct_astar_time_scale_, 1.35);
+    nh.param("manager/direct_astar_vel_dt_weight", direct_astar_vel_dt_weight_, 1.0);
+    nh.param("manager/direct_astar_acc_dt_weight", direct_astar_acc_dt_weight_, 0.45);
+    nh.param("manager/direct_astar_roll_sample_dist", direct_astar_roll_sample_dist_, 0.35);
     nh.param("manager/direct_astar_jump_sample_dist", direct_astar_jump_sample_dist_, 0.18);
     nh.param("manager/direct_astar_jump_anchor_repeat", direct_astar_jump_anchor_repeat_, 1);
+    nh.param("manager/direct_astar_mode_time_allocation", direct_astar_mode_time_allocation_, true);
+    nh.param("manager/direct_astar_roll_time_scale", direct_astar_roll_time_scale_, 1.4);
+    nh.param("manager/direct_astar_jump_time_scale", direct_astar_jump_time_scale_, 1.0);
+    nh.param("manager/direct_astar_jump_speed", direct_astar_jump_speed_, 2.5);
+    nh.param("manager/direct_astar_min_dt", direct_astar_min_dt_, 0.04);
+    nh.param("manager/direct_astar_time_realloc_max_iter", direct_astar_time_realloc_max_iter_, 1);
+    nh.param("manager/direct_astar_allow_jump_impulse", direct_astar_allow_jump_impulse_, true);
     nh.param("manager/astar_pool_size_x", astar_pool_size_x_, 100);
     nh.param("manager/astar_pool_size_y", astar_pool_size_y_, 100);
     nh.param("manager/astar_pool_size_z", astar_pool_size_z_, 100);
@@ -231,6 +241,13 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 add_box(-14.7, -13.3, -0.65, 0.65, 0.0, 1.25);
                 add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
                 // ROS_WARN("[EGOPlannerManager] astar_only inserted detour test obstacles, voxels=%d", occupied_points);
+            }
+            else if (astar_test_scene_ == "roll_tracking")
+            {
+                // ROLL-only tracking demo: one central obstacle, so the reference is a clean single detour.
+                add_box(-14.70, -13.30, -0.70, 0.70, 0.0, 1.20);
+                add_box(-12.20, -11.70, 1.35, 1.95, 0.0, 0.45);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted roll_tracking test obstacles, voxels=%d", occupied_points);
             }
             else
             {
@@ -540,7 +557,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 protected_path.reserve(raw_path.size() * 3);
                 protected_path.push_back(raw_path.front());
 
-                const double roll_bspline_sample_dist = std::min(sample_dist, 0.25);
+                const double roll_bspline_sample_dist = std::max(0.10, direct_astar_roll_sample_dist_);
                 const double jump_bspline_sample_dist = std::max(0.05, direct_astar_jump_sample_dist_);
                 for (size_t i = 1; i < raw_path.size(); ++i)
                 {
@@ -765,17 +782,65 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     direct_astar_jump_end_ratio = static_cast<double>(last_jump_id) /
                                                   static_cast<double>(point_modes.size() - 1);
                 }
+                
+                // max_sample_gap 表示 direct A* 采样点之间的最大几何距离。
+                // 后面会用它估算 uniform B-spline 的参数时间间隔 ts。
+                // 注意：这里的 ts 是 B-spline 参数时间间隔；在原始 EGO-Planner 中，traj_server 会直接把它当作物理执行时间使用。
                 double max_sample_gap = 0.0;
+                size_t max_gap_id = 0;
                 for (size_t i = 1; i < point_set.size(); ++i)
                 {
-                    max_sample_gap = std::max(max_sample_gap, (point_set[i] - point_set[i - 1]).norm());
+                    const double gap = (point_set[i] - point_set[i - 1]).norm();
+                    if (gap > max_sample_gap)
+                    {
+                        max_sample_gap = gap;
+                        max_gap_id = i;
+                    }
                 }
 
-                // Start from a moderately aggressive timing. Keep a light acceleration guard so dense A*
-                // samples do not make the trajectory crawl, while still avoiding infeasible jump B-splines.
-                const double vel_dt = pp_.max_vel_ > 1e-3 ? 1.6 * max_sample_gap / pp_.max_vel_ : ts;
-                const double acc_dt = pp_.max_acc_ > 1e-3 ? std::sqrt(2.0 * max_sample_gap / pp_.max_acc_) : ts;
+                // vel_dt：从速度约束出发估算的最小时间间隔。
+                // 近似含义：相邻采样点最大距离 / 最大速度。
+                // direct_astar_vel_dt_weight_ 是人为系数，越大轨迹越慢，越小轨迹越快。
+                const double vel_dt_weight = std::max(0.1, direct_astar_vel_dt_weight_);
+
+                // acc_dt：从加速度约束出发估算的最小时间间隔。
+                // 来源近似是 s = 0.5 * a * t^2，因此 t = sqrt(2s/a)。
+                // 这一项通常比 vel_dt 更保守，可能把整条轨迹时间轴拉长。
+                const double acc_dt_weight = std::max(0.1, direct_astar_acc_dt_weight_);
+                const double vel_dt = pp_.max_vel_ > 1e-3 ? vel_dt_weight * max_sample_gap / pp_.max_vel_ : ts;
+                const double acc_dt = pp_.max_acc_ > 1e-3 ? acc_dt_weight * std::sqrt(2.0 * max_sample_gap / pp_.max_acc_) : ts;
+
+                // direct_astar_ts 是最终用于整条 direct A* B-spline 的统一参数时间间隔。
+                // 这里取 max(ts, vel_dt, acc_dt)，所以只要某一项很大，整条轨迹都会变慢。
+                // 这也是当前中期版本的局限：ROLL/JUMP 仍然共用一个 uniform ts，没有真正分段时间分配。
                 const double direct_astar_ts = std::max(ts, std::max(vel_dt, acc_dt)) * (has_jump ? direct_astar_time_scale_ : 1.0);
+                const double selected_dt_before_scale = std::max(ts, std::max(vel_dt, acc_dt));
+                const char* selected_dt_source = "base_ts";
+                if (vel_dt >= ts && vel_dt >= acc_dt)
+                {
+                    selected_dt_source = "vel_dt";
+                }
+                else if (acc_dt >= ts && acc_dt >= vel_dt)
+                {
+                    selected_dt_source = "acc_dt";
+                }
+
+                const TRAJ_MODE max_gap_mode =
+                    (max_gap_id > 0 && max_gap_id < point_modes.size() &&
+                     (point_modes[max_gap_id - 1] == JUMP || point_modes[max_gap_id] == JUMP))
+                        ? JUMP
+                        : ROLL;
+                const Eigen::Vector3d max_gap_start =
+                    max_gap_id > 0 ? point_set[max_gap_id - 1] : Eigen::Vector3d::Zero();
+                const Eigen::Vector3d max_gap_end =
+                    max_gap_id < point_set.size() ? point_set[max_gap_id] : Eigen::Vector3d::Zero();
+                ROS_WARN("[EGOPlannerManager] direct A* ts debug: base_ts=%.3fs, vel_dt=%.3fs, acc_dt=%.3fs, selected=%s %.3fs, time_scale=%.3f, final_ts=%.3fs",
+                         ts, vel_dt, acc_dt, selected_dt_source, selected_dt_before_scale,
+                         has_jump ? direct_astar_time_scale_ : 1.0, direct_astar_ts);
+                ROS_WARN("[EGOPlannerManager] direct A* max gap: id=%zu/%zu, mode=%s, gap=%.3fm, p0=(%.2f %.2f %.2f), p1=(%.2f %.2f %.2f), max_vel=%.2f, max_acc=%.2f",
+                         max_gap_id, point_set.size(), max_gap_mode == JUMP ? "JUMP" : "ROLL", max_sample_gap,
+                         max_gap_start.x(), max_gap_start.y(), max_gap_start.z(),
+                         max_gap_end.x(), max_gap_end.y(), max_gap_end.z(), pp_.max_vel_, pp_.max_acc_);
                 if (direct_astar_ts > ts)
                 {
                     // ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",
@@ -812,6 +877,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
     // 通过Astar来使轨迹无碰撞。若已拿到 direct A* 初始路径，则直接使用该路径参数化出的控制点，
     // 避免旧的碰撞段 A* 再次用可能越界的控制点端点搜索。
     vector<vector<PathNode>> a_star_pathes;
+    vector<TRAJ_MODE> direct_ctrl_point_modes;
     const bool use_direct_astar_init = !init_a_star_pathes.empty() && !point_modes.empty();
     if (use_direct_astar_init)
     {
@@ -855,6 +921,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             bspline_optimizer_rebound_->setControlPoints(ctrl_pts);
         }
         bspline_optimizer_rebound_->setControlPointModes(ctrl_point_modes);
+        direct_ctrl_point_modes = ctrl_point_modes;
     }
 
     // 记录初始化阶段耗时，并显示初始路径和 A* 路径。
@@ -892,41 +959,105 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
     /*** STEP 3: REFINE(RE-ALLOCATE TIME) IF NECESSARY - 检查动力学约束 ***/
     UniformBspline pos = UniformBspline(ctrl_pts, 3, ts);
+
+    if (use_direct_astar_init && direct_astar_mode_time_allocation_ &&
+        direct_ctrl_point_modes.size() == static_cast<size_t>(ctrl_pts.cols()) && ctrl_pts.cols() >= 2)
+    {
+        const int order = 3;
+        const int ctrl_num = ctrl_pts.cols();
+        const int knot_num = ctrl_num + order + 1;
+        Eigen::VectorXd non_uniform_knots(knot_num);
+
+        vector<double> ctrl_dt(ctrl_num - 1, ts);
+        const double min_dt = std::max(0.01, direct_astar_min_dt_);
+        const double roll_scale = std::max(0.1, direct_astar_roll_time_scale_);
+        const double jump_scale = std::max(0.1, direct_astar_jump_time_scale_);
+        const double jump_speed = std::max(0.2, direct_astar_jump_speed_);
+
+        for (int i = 0; i + 1 < ctrl_num; ++i)
+        {
+            const double dist = (ctrl_pts.col(i + 1) - ctrl_pts.col(i)).norm();
+            const bool jump_interval = direct_ctrl_point_modes[i] == JUMP || direct_ctrl_point_modes[i + 1] == JUMP;
+            if (jump_interval)
+            {
+                ctrl_dt[i] = std::max(min_dt, jump_scale * dist / jump_speed);
+            }
+            else
+            {
+                ctrl_dt[i] = std::max(min_dt, roll_scale * dist / std::max(0.1, pp_.max_vel_));
+            }
+        }
+
+        const double first_dt = ctrl_dt.empty() ? ts : ctrl_dt.front();
+        non_uniform_knots(0) = -order * first_dt;
+        for (int i = 1; i < knot_num; ++i)
+        {
+            double dt = first_dt;
+            if (i > order)
+            {
+                const int dt_id = std::min(static_cast<int>(ctrl_dt.size()) - 1, std::max(0, i - order - 1));
+                dt = ctrl_dt[dt_id];
+            }
+            non_uniform_knots(i) = non_uniform_knots(i - 1) + dt;
+        }
+        pos.setKnot(non_uniform_knots);
+    }
+
     pos.setPhysicalLimits(pp_.max_vel_, pp_.max_acc_, pp_.feasibility_tolerance_);
+
+    const bool direct_astar_has_jump =
+        use_direct_astar_init &&
+        std::any_of(direct_ctrl_point_modes.begin(), direct_ctrl_point_modes.end(), [](const TRAJ_MODE mode) {
+            return mode == JUMP;
+        });
 
     double ratio;
     bool flag_step_2_success = true;
     if (!pos.checkFeasibility(ratio, false))
     {
         // 若速度/加速度超限，就通过拉长时间来重新分配轨迹参数。
-        // cout << "Need to reallocate time." << endl;
+        // 这里的 ratio 来自 UniformBspline::checkFeasibility：
+        // ratio = max(最大速度/速度上限, sqrt(最大加速度/加速度上限))。
+        // ratio 越大，说明当前样条越不满足动力学约束，后面的 lengthenTime 会把整条时间轴拉长。
+        ROS_WARN("[EGOPlannerManager] feasibility failed before reallocation: duration=%.2fs, ratio=%.3f, direct_astar=%s",
+                 pos.getTimeSum(), ratio, use_direct_astar_init ? "true" : "false");
 
-        if (use_direct_astar_init)
+        if (use_direct_astar_init && direct_astar_allow_jump_impulse_ && direct_astar_has_jump)
         {
-            constexpr int MAX_DIRECT_ASTAR_TIME_SCALE_NUM = 5;
+            // 跳跃球的 JUMP 段由弹性机构释放能量，起跳/落地附近允许出现冲量型高加速度。
+            // 因此这里不再用无人机连续加速度约束 lengthenTime，否则会把整条 ROLL+JUMP 轨迹拉得过慢。
+            ROS_WARN("[EGOPlannerManager] direct A* jump impulse accepted: skip feasibility time reallocation, duration=%.2fs, ratio=%.3f",
+                     pos.getTimeSum(), ratio);
+        }
+        else if (use_direct_astar_init)
+        {
+            const int max_time_scale_num = std::max(0, direct_astar_time_realloc_max_iter_);
             bool direct_feasible = false;
 
-            for (int scale_id = 0; scale_id < MAX_DIRECT_ASTAR_TIME_SCALE_NUM; ++scale_id)
+            for (int scale_id = 0; scale_id < max_time_scale_num; ++scale_id)
             {
+                const double duration_before = pos.getTimeSum();
                 const double scale_ratio = std::max(1.01, ratio * 1.05);
                 pos.lengthenTime(scale_ratio);
-                // ROS_INFO("[EGOPlannerManager] direct A* init: lengthen time only, keep geometric path unchanged. ratio=%.3f, iter=%d",
-
-                //          scale_ratio, scale_id + 1);
+                const double duration_after = pos.getTimeSum();
+                ROS_WARN("[EGOPlannerManager] direct A* lengthenTime iter=%d, scale_ratio=%.3f, duration %.2fs -> %.2fs",
+                         scale_id + 1, scale_ratio, duration_before, duration_after);
 
                 if (pos.checkFeasibility(ratio, false))
                 {
                     direct_feasible = true;
+                    ROS_WARN("[EGOPlannerManager] direct A* feasible after lengthenTime: iter=%d, duration=%.2fs, next_ratio=%.3f",
+                             scale_id + 1, pos.getTimeSum(), ratio);
                     break;
                 }
             }
 
             if (!direct_feasible)
             {
-                // ROS_WARN("[EGOPlannerManager] direct A* init is still dynamically infeasible after time scaling. last_ratio=%.3f",
-
-                //          ratio);
-                flag_step_2_success = false;
+                // 中期展示采用 direct A* 全局轨迹时，允许在限定重分配轮数后继续发布。
+                // 这样不会为了满足无人机模型的严格加速度检查，把整条跳跃球轨迹拉到过长。
+                ROS_WARN("[EGOPlannerManager] direct A* bounded time reallocation accepted: iter=%d, duration=%.2fs, remaining_ratio=%.3f",
+                         max_time_scale_num, pos.getTimeSum(), ratio);
             }
         }
         else

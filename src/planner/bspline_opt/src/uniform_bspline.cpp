@@ -150,25 +150,37 @@ bool UniformBspline::checkFeasibility(double& ratio, bool show)
 
     /* check vel feasibility and insert points */
     double max_vel = -1.0;
+    int max_vel_id = -1;
+    int max_vel_axis = -1;
+    Eigen::VectorXd max_vel_vec = Eigen::VectorXd::Zero(dimension);
     double enlarged_vel_lim = limit_vel_ * (1.0 + feasibility_tolerance_) + 1e-4;
     for (int i = 0; i < P.cols() - 1; ++i)
     {
         Eigen::VectorXd vel = p_ * (P.col(i + 1) - P.col(i)) / (u_(i + p_ + 1) - u_(i + 1));
 
+        for (int j = 0; j < dimension; ++j)
+        {
+            if (fabs(vel(j)) > max_vel)
+            {
+                max_vel = fabs(vel(j));
+                max_vel_id = i;
+                max_vel_axis = j;
+                max_vel_vec = vel;
+            }
+        }
+
         if (fabs(vel(0)) > enlarged_vel_lim || fabs(vel(1)) > enlarged_vel_lim || fabs(vel(2)) > enlarged_vel_lim)
         {
             if (show) cout << "[Check]: Infeasible vel " << i << " :" << vel.transpose() << endl;
             fea = false;
-
-            for (int j = 0; j < dimension; ++j)
-            {
-                max_vel = max(max_vel, fabs(vel(j)));
-            }
         }
     }
 
     /* acc feasibility */
     double max_acc = -1.0;
+    int max_acc_id = -1;
+    int max_acc_axis = -1;
+    Eigen::VectorXd max_acc_vec = Eigen::VectorXd::Zero(dimension);
     double enlarged_acc_lim = limit_acc_ * (1.0 + feasibility_tolerance_) + 1e-4;
     for (int i = 0; i < P.cols() - 2; ++i)
     {
@@ -177,19 +189,44 @@ bool UniformBspline::checkFeasibility(double& ratio, bool show)
                                (P.col(i + 1) - P.col(i)) / (u_(i + p_ + 1) - u_(i + 1))) /
                               (u_(i + p_ + 1) - u_(i + 2));
 
+        for (int j = 0; j < dimension; ++j)
+        {
+            if (fabs(acc(j)) > max_acc)
+            {
+                max_acc = fabs(acc(j));
+                max_acc_id = i;
+                max_acc_axis = j;
+                max_acc_vec = acc;
+            }
+        }
+
         if (fabs(acc(0)) > enlarged_acc_lim || fabs(acc(1)) > enlarged_acc_lim || fabs(acc(2)) > enlarged_acc_lim)
         {
             if (show) cout << "[Check]: Infeasible acc " << i << " :" << acc.transpose() << endl;
             fea = false;
-
-            for (int j = 0; j < dimension; ++j)
-            {
-                max_acc = max(max_acc, fabs(acc(j)));
-            }
         }
     }
 
     ratio = max(max_vel / limit_vel_, sqrt(fabs(max_acc) / limit_acc_));
+
+    if (!fea)
+    {
+        const char* axis_name[3] = {"x", "y", "z"};
+        const double vel_ratio = limit_vel_ > 1e-6 ? max_vel / limit_vel_ : 0.0;
+        const double acc_ratio = limit_acc_ > 1e-6 ? max_acc / limit_acc_ : 0.0;
+        ROS_WARN_THROTTLE(0.5,
+                          "[B-spline feasibility] max_vel=%.3f m/s axis=%s id=%d vec=(%.3f %.3f %.3f), limit=%.3f, ratio=%.3f",
+                          max_vel, max_vel_axis >= 0 && max_vel_axis < 3 ? axis_name[max_vel_axis] : "?", max_vel_id,
+                          max_vel_vec.size() > 0 ? max_vel_vec(0) : 0.0,
+                          max_vel_vec.size() > 1 ? max_vel_vec(1) : 0.0,
+                          max_vel_vec.size() > 2 ? max_vel_vec(2) : 0.0, limit_vel_, vel_ratio);
+        ROS_WARN_THROTTLE(0.5,
+                          "[B-spline feasibility] max_acc=%.3f m/s^2 axis=%s id=%d vec=(%.3f %.3f %.3f), limit=%.3f, ratio=%.3f, sqrt_ratio=%.3f, selected_ratio=%.3f",
+                          max_acc, max_acc_axis >= 0 && max_acc_axis < 3 ? axis_name[max_acc_axis] : "?", max_acc_id,
+                          max_acc_vec.size() > 0 ? max_acc_vec(0) : 0.0,
+                          max_acc_vec.size() > 1 ? max_acc_vec(1) : 0.0,
+                          max_acc_vec.size() > 2 ? max_acc_vec(2) : 0.0, limit_acc_, acc_ratio, sqrt(fabs(acc_ratio)), ratio);
+    }
 
     return fea;
 }

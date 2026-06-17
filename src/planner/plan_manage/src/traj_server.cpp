@@ -23,6 +23,7 @@ int traj_id_;
 // yaw control
 double last_yaw_, last_yaw_dot_;
 double time_forward_;
+double physical_time_scale_;
 
 void bsplineCallback(ego_planner::BsplineConstPtr msg)
 {
@@ -64,6 +65,10 @@ void bsplineCallback(ego_planner::BsplineConstPtr msg)
   traj_.push_back(traj_[1].getDerivative());
 
   traj_duration_ = traj_[0].getTimeSum();
+
+  const double time_scale = std::max(0.05, physical_time_scale_);
+  ROS_WARN("[traj_server] receive traj id=%d, spline_duration=%.2fs, physical_time_scale=%.3f, expected_execute_duration=%.2fs, ctrl_pts=%zu",
+           traj_id_, traj_duration_, time_scale, traj_duration_ * time_scale, msg->pos_pts.size());
 
   receive_traj_ = true;
 }
@@ -167,7 +172,14 @@ void cmdCallback(const ros::TimerEvent &e)
     return;
 
   ros::Time time_now = ros::Time::now();
-  double t_cur = (time_now - start_time_).toSec();
+
+  // t_physical 是真实经过的物理时间，单位为秒。
+  // t_cur 是用于查询 B-spline 的参数时间。
+  // physical_time_scale_ 只做“物理时间 -> 样条参数时间”的映射，不改变蓝色 B-spline 几何本身。
+  // 例如 scale=0.5 时，物理时间过 1s，相当于在样条参数时间上前进 2s，执行速度变为原来的约 2 倍。
+  const double t_physical = (time_now - start_time_).toSec();
+  const double time_scale = std::max(0.05, physical_time_scale_);
+  const double t_cur = t_physical / time_scale;
 
   Eigen::Vector3d pos(Eigen::Vector3d::Zero()), vel(Eigen::Vector3d::Zero()), acc(Eigen::Vector3d::Zero()), pos_f;
   std::pair<double, double> yaw_yawdot(0, 0);
@@ -176,8 +188,16 @@ void cmdCallback(const ros::TimerEvent &e)
   if (t_cur < traj_duration_ && t_cur >= 0.0)
   {
     pos = traj_[0].evaluateDeBoorT(t_cur);
-    vel = traj_[1].evaluateDeBoorT(t_cur);
-    acc = traj_[2].evaluateDeBoorT(t_cur);
+
+    // 链式法则：p = p(t_cur), t_cur = t_physical / scale。
+    // 因此物理速度 v = dp/dt_physical = (dp/dt_cur) / scale。
+    // 物理加速度 a = d2p/dt_physical2 = (d2p/dt_cur2) / scale^2。
+    vel = traj_[1].evaluateDeBoorT(t_cur) / time_scale;
+    acc = traj_[2].evaluateDeBoorT(t_cur) / (time_scale * time_scale);
+
+    ROS_INFO_THROTTLE(1.0,
+                      "[traj_server] t_physical=%.2fs, spline_t=%.2fs/%.2fs, scale=%.3f, pos=(%.2f %.2f %.2f), |vel_cmd|=%.2fm/s",
+                      t_physical, t_cur, traj_duration_, time_scale, pos.x(), pos.y(), pos.z(), vel.norm());
 
     /*** calculate yaw ***/
     yaw_yawdot = calculate_yaw(t_cur, pos, time_now, time_last);
@@ -192,6 +212,9 @@ void cmdCallback(const ros::TimerEvent &e)
     pos = traj_[0].evaluateDeBoorT(traj_duration_);
     vel.setZero();
     acc.setZero();
+
+    ROS_INFO_THROTTLE(1.0, "[traj_server] traj finished: t_physical=%.2fs, expected_execute_duration=%.2fs, hold pos=(%.2f %.2f %.2f)",
+                      t_physical, traj_duration_ * time_scale, pos.x(), pos.y(), pos.z());
 
     yaw_yawdot.first = last_yaw_;
     yaw_yawdot.second = 0;
@@ -251,6 +274,7 @@ int main(int argc, char **argv)
   cmd.kv[2] = vel_gain[2];
 
   nh.param("traj_server/time_forward", time_forward_, -1.0);
+  nh.param("traj_server/physical_time_scale", physical_time_scale_, 1.0);
   last_yaw_ = 0.0;
   last_yaw_dot_ = 0.0;
 

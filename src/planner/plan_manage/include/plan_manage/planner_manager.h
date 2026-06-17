@@ -72,8 +72,18 @@ class EGOPlannerManager
     double direct_astar_smooth_weight_{0.45};
     double direct_astar_jump_clearance_{0.25};
     double direct_astar_time_scale_{1.35};
+    double direct_astar_vel_dt_weight_{1.0};
+    double direct_astar_acc_dt_weight_{0.45};
+    double direct_astar_roll_sample_dist_{0.35};
     double direct_astar_jump_sample_dist_{0.18};
     int direct_astar_jump_anchor_repeat_{1};
+    bool direct_astar_mode_time_allocation_{true};
+    double direct_astar_roll_time_scale_{1.4};
+    double direct_astar_jump_time_scale_{1.0};
+    double direct_astar_jump_speed_{2.5};
+    double direct_astar_min_dt_{0.04};
+    int direct_astar_time_realloc_max_iter_{1};
+    bool direct_astar_allow_jump_impulse_{true};
     int astar_pool_size_x_{100};
     int astar_pool_size_y_{100};
     int astar_pool_size_z_{100};

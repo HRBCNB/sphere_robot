@@ -93,6 +93,11 @@ int main(int argc, char** argv)
         add_box(-14.7, -13.3, -0.65, 0.65, 0.0, 1.25);
         add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
     }
+    else if (scenario == "roll_tracking")
+    {
+        add_box(-14.70, -13.30, -0.70, 0.70, 0.0, 1.20);
+        add_box(-12.20, -11.70, 1.35, 1.95, 0.0, 0.45);
+    }
     else
     {
         add_box(wall_x - 0.5 * wall_thickness, wall_x + 0.5 * wall_thickness,

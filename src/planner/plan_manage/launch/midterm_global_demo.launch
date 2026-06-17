@@ -1,31 +1,30 @@
 <launch>
+  <!-- ===================== 中期展示统一调参区 ===================== -->
+
+  <!-- 运行开关 -->
+  <arg name="use_rviz" default="false"/>
+  <arg name="use_control" default="false"/>
+  <arg name="auto_goal" default="true"/>
+  <arg name="astar_only" default="false"/>
+  <arg name="show_local_traj" default="true"/>
+  <arg name="show_whole_traj" default="true"/>
+  <arg name="enable_local_replan" default="false"/>
+  <arg name="enable_periodic_replan" default="false"/>
+  <arg name="optimize_direct_astar" default="false"/>
+
+  <!-- 起点由仿真器固定在 (-18, 0, 0)，这里主要调目标点 -->
+  <arg name="goal_x" default="0.0"/>
+  <arg name="goal_y" default="0.0"/>
+  <arg name="goal_z" default="0.0"/>
+  <arg name="fixed_goal_delay" default="4.0"/>
+  <arg name="fixed_goal_repeat" default="1"/>
+  <arg name="fixed_goal_interval" default="1.0"/>
+
+  <!-- 地图、感知和一次性搜索范围 -->
   <arg name="map_size_x" default="44.0"/>
   <arg name="map_size_y" default="18.0"/>
   <arg name="map_size_z" default="3.0"/>
   <arg name="planning_horizon" default="18.5"/>
-  <arg name="odom_topic" default="/visual_slam/odom"/>
-  <arg name="use_rviz" default="false"/>
-  <arg name="auto_goal" default="true"/>
-  <arg name="astar_only" default="false"/>
-  <arg name="use_control" default="false"/>
-  <arg name="goal_x" default="0.0"/>
-  <arg name="goal_y" default="0.0"/>
-  <arg name="goal_z" default="0.0"/>
-  <arg name="show_local_traj" default="true"/>
-  <arg name="show_whole_traj" default="true"/>
-  <arg name="whole_traj_sample_step" default="0.05"/>
-  <arg name="enable_local_replan" default="false"/>
-  <arg name="enable_periodic_replan" default="false"/>
-  <arg name="optimize_direct_astar" default="false"/>
-  <arg name="direct_astar_sample_dist" default="0.8"/>
-  <arg name="direct_astar_smooth_iter" default="2"/>
-  <arg name="direct_astar_smooth_weight" default="0.45"/>
-  <arg name="direct_astar_jump_clearance" default="0.25"/>
-  <arg name="direct_astar_time_scale" default="1.00"/>
-  <arg name="direct_astar_jump_sample_dist" default="0.20"/>
-  <arg name="direct_astar_jump_anchor_repeat" default="1"/>
-  <arg name="max_vel" default="3.6"/>
-  <arg name="max_acc" default="5.5"/>
   <arg name="sensing_horizon" default="22.0"/>
   <arg name="local_update_range_x" default="22.0"/>
   <arg name="local_update_range_y" default="9.0"/>
@@ -34,6 +33,64 @@
   <arg name="astar_pool_size_x" default="240"/>
   <arg name="astar_pool_size_y" default="140"/>
   <arg name="astar_pool_size_z" default="50"/>
+  <arg name="obstacle_scenario" default="midterm_global"/>
+
+  <!-- 运动学/动力学约束，跳跃速度慢时优先调 max_vel、max_acc 和 direct_astar_* -->
+  <arg name="max_vel" default="3.6"/>
+  <arg name="max_acc" default="5.5"/>
+  <arg name="traj_server_time_forward" default="1.0"/>
+  <arg name="traj_server_physical_time_scale" default="1.0"/>
+
+  <!-- direct A* 到 B-spline 的时间和形状参数 -->
+  <arg name="direct_astar_sample_dist" default="0.8"/>
+  <arg name="direct_astar_smooth_iter" default="2"/>
+  <arg name="direct_astar_smooth_weight" default="0.45"/>
+  <arg name="direct_astar_jump_clearance" default="0.25"/>
+  <arg name="direct_astar_time_scale" default="1.00"/>
+  <arg name="direct_astar_vel_dt_weight" default="1.0"/>
+  <arg name="direct_astar_acc_dt_weight" default="0.45"/>
+  <arg name="direct_astar_roll_sample_dist" default="0.35"/>
+  <arg name="direct_astar_jump_sample_dist" default="0.20"/>
+  <arg name="direct_astar_jump_anchor_repeat" default="1"/>
+  <arg name="direct_astar_mode_time_allocation" default="false"/>
+  <arg name="direct_astar_roll_time_scale" default="1.2"/>
+  <arg name="direct_astar_jump_time_scale" default="1.0"/>
+  <arg name="direct_astar_jump_speed" default="2.8"/>
+  <arg name="direct_astar_min_dt" default="0.04"/>
+  <arg name="direct_astar_time_realloc_max_iter" default="1"/>
+  <arg name="direct_astar_allow_jump_impulse" default="true"/>
+
+  <!-- ROLL / JUMP 混合 A* 决策参数 -->
+  <arg name="astar_test_wall" default="true"/>
+  <arg name="astar_test_scene" default="midterm_global"/>
+  <arg name="astar_height" default="0.0"/>
+  <arg name="roll_over_height" default="0.15"/>
+  <arg name="roll_over_penalty" default="0.5"/>
+  <arg name="max_jump_h" default="0.72"/>
+  <arg name="max_jump_d" default="2.0"/>
+  <arg name="jump_penalty" default="5.5"/>
+  <arg name="jump_takeoff_clearance" default="0.45"/>
+  <arg name="jump_landing_clearance" default="0.50"/>
+  <arg name="jump_vertical_clearance" default="0.16"/>
+  <arg name="line_deviation_weight" default="0.45"/>
+  <arg name="max_line_deviation" default="2.6"/>
+  <arg name="frontal_jump_cos" default="0.80"/>
+  <arg name="jumpable_detour_penalty" default="5.0"/>
+  <arg name="use_inflate_for_jump" default="false"/>
+  <arg name="debug_decisions" default="false"/>
+  <arg name="debug_decision_limit" default="120"/>
+
+  <!-- 可视化/话题/相机内参，通常不需要改 -->
+  <arg name="odom_topic" default="/visual_slam/odom"/>
+  <arg name="whole_traj_sample_step" default="0.05"/>
+  <arg name="waypoint_type" default="manual-lonely-waypoint"/>
+  <arg name="flight_type" default="1"/>
+  <arg name="camera_cx" default="321.04638671875"/>
+  <arg name="camera_cy" default="243.44969177246094"/>
+  <arg name="camera_fx" default="387.229248046875"/>
+  <arg name="camera_fy" default="387.229248046875"/>
+
+  <!-- =================== 下方为节点连接区，通常不用改 =================== -->
 
   <include file="$(find ego_planner)/launch/advanced_param.xml">
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
@@ -45,15 +102,15 @@
     <arg name="depth_topic" value="/pcl_render_node/depth"/>
     <arg name="cloud_topic" value="/pcl_render_node/cloud"/>
 
-    <arg name="cx" value="321.04638671875"/>
-    <arg name="cy" value="243.44969177246094"/>
-    <arg name="fx" value="387.229248046875"/>
-    <arg name="fy" value="387.229248046875"/>
+    <arg name="cx" value="$(arg camera_cx)"/>
+    <arg name="cy" value="$(arg camera_cy)"/>
+    <arg name="fx" value="$(arg camera_fx)"/>
+    <arg name="fy" value="$(arg camera_fy)"/>
 
     <arg name="max_vel" value="$(arg max_vel)"/>
     <arg name="max_acc" value="$(arg max_acc)"/>
     <arg name="planning_horizon" value="$(arg planning_horizon)"/>
-    <arg name="flight_type" value="1"/>
+    <arg name="flight_type" value="$(arg flight_type)"/>
     <arg name="astar_only" value="$(arg astar_only)"/>
     <arg name="show_local_traj" value="$(arg show_local_traj)"/>
     <arg name="show_whole_traj" value="$(arg show_whole_traj)"/>
@@ -66,8 +123,18 @@
     <arg name="direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)"/>
     <arg name="direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)"/>
     <arg name="direct_astar_time_scale" value="$(arg direct_astar_time_scale)"/>
+    <arg name="direct_astar_vel_dt_weight" value="$(arg direct_astar_vel_dt_weight)"/>
+    <arg name="direct_astar_acc_dt_weight" value="$(arg direct_astar_acc_dt_weight)"/>
+    <arg name="direct_astar_roll_sample_dist" value="$(arg direct_astar_roll_sample_dist)"/>
     <arg name="direct_astar_jump_sample_dist" value="$(arg direct_astar_jump_sample_dist)"/>
     <arg name="direct_astar_jump_anchor_repeat" value="$(arg direct_astar_jump_anchor_repeat)"/>
+    <arg name="direct_astar_mode_time_allocation" value="$(arg direct_astar_mode_time_allocation)"/>
+    <arg name="direct_astar_roll_time_scale" value="$(arg direct_astar_roll_time_scale)"/>
+    <arg name="direct_astar_jump_time_scale" value="$(arg direct_astar_jump_time_scale)"/>
+    <arg name="direct_astar_jump_speed" value="$(arg direct_astar_jump_speed)"/>
+    <arg name="direct_astar_min_dt" value="$(arg direct_astar_min_dt)"/>
+    <arg name="direct_astar_time_realloc_max_iter" value="$(arg direct_astar_time_realloc_max_iter)"/>
+    <arg name="direct_astar_allow_jump_impulse" value="$(arg direct_astar_allow_jump_impulse)"/>
     <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
     <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
     <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>
@@ -94,30 +161,31 @@
     <arg name="point4_z" value="1.0"/>
   </include>
 
-  <param name="/ego_planner_node/manager/astar_test_wall" value="true" type="bool"/>
-  <param name="/ego_planner_node/manager/astar_test_scene" value="midterm_global" type="str"/>
-  <param name="/ego_planner_node/manager/astar_height" value="0.0" type="double"/>
-  <param name="/ego_planner_node/planner/max_line_deviation" value="2.6" type="double"/>
-  <param name="/ego_planner_node/planner/max_jump_h" value="0.72" type="double"/>
-  <param name="/ego_planner_node/planner/jump_penalty" value="5.5" type="double"/>
-  <param name="/ego_planner_node/planner/max_jump_d" value="2.0" type="double"/>
-  <param name="/ego_planner_node/planner/jump_takeoff_clearance" value="0.45" type="double"/>
-  <param name="/ego_planner_node/planner/jump_landing_clearance" value="0.50" type="double"/>
-  <param name="/ego_planner_node/planner/jump_vertical_clearance" value="0.16" type="double"/>
-  <param name="/ego_planner_node/planner/line_deviation_weight" value="0.45" type="double"/>
-  <param name="/ego_planner_node/planner/frontal_jump_cos" value="0.80" type="double"/>
-  <param name="/ego_planner_node/planner/jumpable_detour_penalty" value="5.0" type="double"/>
-  <param name="/ego_planner_node/planner/roll_over_height" value="0.15" type="double"/>
-  <param name="/ego_planner_node/planner/roll_over_penalty" value="0.5" type="double"/>
-  <param name="/ego_planner_node/planner/debug_decisions" value="false" type="bool"/>
-  <param name="/ego_planner_node/planner/debug_decision_limit" value="120" type="int"/>
-  <param name="/ego_planner_node/planner/use_inflate_for_jump" value="false" type="bool"/>
+  <param name="/ego_planner_node/manager/astar_test_wall" value="$(arg astar_test_wall)" type="bool"/>
+  <param name="/ego_planner_node/manager/astar_test_scene" value="$(arg astar_test_scene)" type="str"/>
+  <param name="/ego_planner_node/manager/astar_height" value="$(arg astar_height)" type="double"/>
+  <param name="/ego_planner_node/planner/max_line_deviation" value="$(arg max_line_deviation)" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_h" value="$(arg max_jump_h)" type="double"/>
+  <param name="/ego_planner_node/planner/jump_penalty" value="$(arg jump_penalty)" type="double"/>
+  <param name="/ego_planner_node/planner/max_jump_d" value="$(arg max_jump_d)" type="double"/>
+  <param name="/ego_planner_node/planner/jump_takeoff_clearance" value="$(arg jump_takeoff_clearance)" type="double"/>
+  <param name="/ego_planner_node/planner/jump_landing_clearance" value="$(arg jump_landing_clearance)" type="double"/>
+  <param name="/ego_planner_node/planner/jump_vertical_clearance" value="$(arg jump_vertical_clearance)" type="double"/>
+  <param name="/ego_planner_node/planner/line_deviation_weight" value="$(arg line_deviation_weight)" type="double"/>
+  <param name="/ego_planner_node/planner/frontal_jump_cos" value="$(arg frontal_jump_cos)" type="double"/>
+  <param name="/ego_planner_node/planner/jumpable_detour_penalty" value="$(arg jumpable_detour_penalty)" type="double"/>
+  <param name="/ego_planner_node/planner/roll_over_height" value="$(arg roll_over_height)" type="double"/>
+  <param name="/ego_planner_node/planner/roll_over_penalty" value="$(arg roll_over_penalty)" type="double"/>
+  <param name="/ego_planner_node/planner/debug_decisions" value="$(arg debug_decisions)" type="bool"/>
+  <param name="/ego_planner_node/planner/debug_decision_limit" value="$(arg debug_decision_limit)" type="int"/>
+  <param name="/ego_planner_node/planner/use_inflate_for_jump" value="$(arg use_inflate_for_jump)" type="bool"/>
 
   <group unless="$(arg astar_only)">
     <node pkg="ego_planner" name="traj_server" type="traj_server" output="screen">
       <remap from="/position_cmd" to="planning/pos_cmd"/>
       <remap from="/odom_world" to="$(arg odom_topic)"/>
-      <param name="traj_server/time_forward" value="1.0" type="double"/>
+      <param name="traj_server/time_forward" value="$(arg traj_server_time_forward)" type="double"/>
+      <param name="traj_server/physical_time_scale" value="$(arg traj_server_physical_time_scale)" type="double"/>
     </node>
   </group>
 
@@ -125,7 +193,7 @@
     <remap from="~odom" to="$(arg odom_topic)"/>
     <remap from="~goal" to="/move_base_simple/goal"/>
     <remap from="~traj_start_trigger" to="/traj_start_trigger"/>
-    <param name="waypoint_type" value="manual-lonely-waypoint"/>
+    <param name="waypoint_type" value="$(arg waypoint_type)"/>
   </node>
 
   <include file="$(find ego_planner)/launch/low_obstacle_simulator.xml">
@@ -134,7 +202,7 @@
     <arg name="map_size_z_" value="$(arg map_size_z)"/>
     <arg name="odometry_topic" value="$(arg odom_topic)"/>
     <arg name="use_control" value="$(arg use_control)"/>
-    <arg name="obstacle_scenario" value="midterm_global"/>
+    <arg name="obstacle_scenario" value="$(arg obstacle_scenario)"/>
     <arg name="sensing_horizon" value="$(arg sensing_horizon)"/>
   </include>
 
@@ -143,9 +211,9 @@
       <param name="goal_x" value="$(arg goal_x)"/>
       <param name="goal_y" value="$(arg goal_y)"/>
       <param name="goal_z" value="$(arg goal_z)"/>
-      <param name="delay" value="4.0"/>
-      <param name="repeat" value="1"/>
-      <param name="interval" value="1.0"/>
+      <param name="delay" value="$(arg fixed_goal_delay)"/>
+      <param name="repeat" value="$(arg fixed_goal_repeat)"/>
+      <param name="interval" value="$(arg fixed_goal_interval)"/>
     </node>
   </group>
 
