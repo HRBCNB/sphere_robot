@@ -21,7 +21,9 @@
   <arg name="direct_astar_smooth_iter" default="2"/>
   <arg name="direct_astar_smooth_weight" default="0.45"/>
   <arg name="direct_astar_jump_clearance" default="0.25"/>
-  <arg name="direct_astar_time_scale" default="1.10"/>
+  <arg name="direct_astar_time_scale" default="1.00"/>
+  <arg name="direct_astar_jump_sample_dist" default="0.20"/>
+  <arg name="direct_astar_jump_anchor_repeat" default="1"/>
   <arg name="max_vel" default="3.6"/>
   <arg name="max_acc" default="5.5"/>
   <arg name="sensing_horizon" default="22.0"/>
@@ -64,6 +66,8 @@
     <arg name="direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)"/>
     <arg name="direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)"/>
     <arg name="direct_astar_time_scale" value="$(arg direct_astar_time_scale)"/>
+    <arg name="direct_astar_jump_sample_dist" value="$(arg direct_astar_jump_sample_dist)"/>
+    <arg name="direct_astar_jump_anchor_repeat" value="$(arg direct_astar_jump_anchor_repeat)"/>
     <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
     <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
     <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>

@@ -47,6 +47,8 @@
   <arg name="direct_astar_smooth_weight" default="0.45"/>
   <arg name="direct_astar_jump_clearance" default="0.25"/>
   <arg name="direct_astar_time_scale" default="1.35"/>
+  <arg name="direct_astar_jump_sample_dist" default="0.18"/>
+  <arg name="direct_astar_jump_anchor_repeat" default="1"/>
   <arg name="local_update_range_x" default="5.5"/>
   <arg name="local_update_range_y" default="5.5"/>
   <arg name="local_update_range_z" default="4.5"/>
@@ -162,6 +164,8 @@
     <param name="manager/direct_astar_smooth_weight" value="$(arg direct_astar_smooth_weight)" type="double"/>
     <param name="manager/direct_astar_jump_clearance" value="$(arg direct_astar_jump_clearance)" type="double"/>
     <param name="manager/direct_astar_time_scale" value="$(arg direct_astar_time_scale)" type="double"/>
+    <param name="manager/direct_astar_jump_sample_dist" value="$(arg direct_astar_jump_sample_dist)" type="double"/>
+    <param name="manager/direct_astar_jump_anchor_repeat" value="$(arg direct_astar_jump_anchor_repeat)" type="int"/>
     <param name="manager/astar_pool_size_x" value="$(arg astar_pool_size_x)" type="int"/>
     <param name="manager/astar_pool_size_y" value="$(arg astar_pool_size_y)" type="int"/>
     <param name="manager/astar_pool_size_z" value="$(arg astar_pool_size_z)" type="int"/>

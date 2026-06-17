@@ -88,6 +88,8 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/direct_astar_smooth_weight", direct_astar_smooth_weight_, 0.45);
     nh.param("manager/direct_astar_jump_clearance", direct_astar_jump_clearance_, 0.25);
     nh.param("manager/direct_astar_time_scale", direct_astar_time_scale_, 1.35);
+    nh.param("manager/direct_astar_jump_sample_dist", direct_astar_jump_sample_dist_, 0.18);
+    nh.param("manager/direct_astar_jump_anchor_repeat", direct_astar_jump_anchor_repeat_, 1);
     nh.param("manager/astar_pool_size_x", astar_pool_size_x_, 100);
     nh.param("manager/astar_pool_size_y", astar_pool_size_y_, 100);
     nh.param("manager/astar_pool_size_z", astar_pool_size_z_, 100);
@@ -539,7 +541,7 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 protected_path.push_back(raw_path.front());
 
                 const double roll_bspline_sample_dist = std::min(sample_dist, 0.25);
-                const double jump_bspline_sample_dist = std::min(sample_dist, 0.05);
+                const double jump_bspline_sample_dist = std::max(0.05, direct_astar_jump_sample_dist_);
                 for (size_t i = 1; i < raw_path.size(); ++i)
                 {
                     const Eigen::Vector3d seg_start = raw_path[i - 1].pos;
@@ -706,7 +708,8 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
 
                         if (point_modes[i] == JUMP)
                         {
-                            for (int repeat = 0; repeat < 4; ++repeat)
+                            const int jump_anchor_repeat = std::max(0, direct_astar_jump_anchor_repeat_);
+                            for (int repeat = 0; repeat < jump_anchor_repeat; ++repeat)
                             {
                                 anchored_points.push_back(point_set[i]);
                                 anchored_modes.push_back(point_modes[i]);
