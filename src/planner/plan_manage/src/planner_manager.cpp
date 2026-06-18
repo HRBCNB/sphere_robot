@@ -93,6 +93,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/direct_astar_roll_sample_dist", direct_astar_roll_sample_dist_, 0.35);
     nh.param("manager/direct_astar_jump_sample_dist", direct_astar_jump_sample_dist_, 0.18);
     nh.param("manager/direct_astar_jump_anchor_repeat", direct_astar_jump_anchor_repeat_, 1);
+    nh.param("manager/direct_astar_roll_anchor_repeat", direct_astar_roll_anchor_repeat_, 2);
     nh.param("manager/direct_astar_mode_time_allocation", direct_astar_mode_time_allocation_, true);
     nh.param("manager/direct_astar_roll_time_scale", direct_astar_roll_time_scale_, 1.4);
     nh.param("manager/direct_astar_jump_time_scale", direct_astar_jump_time_scale_, 1.0);
@@ -749,10 +750,12 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                         const double turn_cos = prev_dir.normalized().dot(next_dir.normalized());
                         if (turn_cos < 0.98)
                         {
-                            anchored_points.push_back(point_set[i]);
-                            anchored_modes.push_back(point_modes[i]);
-                            anchored_points.push_back(point_set[i]);
-                            anchored_modes.push_back(point_modes[i]);
+                            const int roll_anchor_repeat = std::max(0, direct_astar_roll_anchor_repeat_);
+                            for (int repeat = 0; repeat < roll_anchor_repeat; ++repeat)
+                            {
+                                anchored_points.push_back(point_set[i]);
+                                anchored_modes.push_back(point_modes[i]);
+                            }
                         }
                     }
 

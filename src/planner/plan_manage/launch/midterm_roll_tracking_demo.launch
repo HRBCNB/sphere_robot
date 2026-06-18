@@ -19,6 +19,13 @@
     <!-- 跟踪展示时使用真实样条时间，不做额外播放加速。 -->
     <arg name="traj_server_physical_time_scale" value="1.0"/>
 
+    <!-- ROLL-only 跟踪展示采用折中动力学参数：优先保证控制器能跟上。 -->
+    <arg name="max_vel" value="3.6"/>
+    <arg name="max_acc" value="12.0"/>
+    <arg name="direct_astar_acc_dt_weight" value="0.25"/>
+    <arg name="direct_astar_vel_dt_weight" value="0.8"/>
+    <arg name="direct_astar_roll_anchor_repeat" value="0"/>
+
     <!-- 使用更适合跟踪验证的绕障场景，避开 midterm_global 中逼迫跳跃的窄通道。 -->
     <arg name="astar_test_scene" value="roll_tracking"/>
     <arg name="obstacle_scenario" value="roll_tracking"/>

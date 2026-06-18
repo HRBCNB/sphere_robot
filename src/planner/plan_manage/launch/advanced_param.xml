@@ -52,6 +52,7 @@
   <arg name="direct_astar_roll_sample_dist" default="0.35"/>
   <arg name="direct_astar_jump_sample_dist" default="0.18"/>
   <arg name="direct_astar_jump_anchor_repeat" default="1"/>
+  <arg name="direct_astar_roll_anchor_repeat" default="2"/>
   <arg name="direct_astar_mode_time_allocation" default="true"/>
   <arg name="direct_astar_roll_time_scale" default="1.4"/>
   <arg name="direct_astar_jump_time_scale" default="1.0"/>
@@ -179,6 +180,7 @@
     <param name="manager/direct_astar_roll_sample_dist" value="$(arg direct_astar_roll_sample_dist)" type="double"/>
     <param name="manager/direct_astar_jump_sample_dist" value="$(arg direct_astar_jump_sample_dist)" type="double"/>
     <param name="manager/direct_astar_jump_anchor_repeat" value="$(arg direct_astar_jump_anchor_repeat)" type="int"/>
+    <param name="manager/direct_astar_roll_anchor_repeat" value="$(arg direct_astar_roll_anchor_repeat)" type="int"/>
     <param name="manager/direct_astar_mode_time_allocation" value="$(arg direct_astar_mode_time_allocation)" type="bool"/>
     <param name="manager/direct_astar_roll_time_scale" value="$(arg direct_astar_roll_time_scale)" type="double"/>
     <param name="manager/direct_astar_jump_time_scale" value="$(arg direct_astar_jump_time_scale)" type="double"/>

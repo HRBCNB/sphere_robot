@@ -77,6 +77,7 @@ class EGOPlannerManager
     double direct_astar_roll_sample_dist_{0.35};
     double direct_astar_jump_sample_dist_{0.18};
     int direct_astar_jump_anchor_repeat_{1};
+    int direct_astar_roll_anchor_repeat_{2};
     bool direct_astar_mode_time_allocation_{true};
     double direct_astar_roll_time_scale_{1.4};
     double direct_astar_jump_time_scale_{1.0};
