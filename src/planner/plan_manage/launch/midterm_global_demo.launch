@@ -12,7 +12,10 @@
   <arg name="enable_periodic_replan" default="false"/>
   <arg name="optimize_direct_astar" default="false"/>
 
-  <!-- 起点由仿真器固定在 (-18, 0, 0)，这里主要调目标点 -->
+  <!-- 仿真起点和固定目标点 -->
+  <arg name="init_x" default="-18.0"/>
+  <arg name="init_y" default="0.0"/>
+  <arg name="init_z" default="0.0"/>
   <arg name="goal_x" default="0.0"/>
   <arg name="goal_y" default="0.0"/>
   <arg name="goal_z" default="0.0"/>
@@ -60,6 +63,7 @@
   <arg name="direct_astar_min_dt" default="0.04"/>
   <arg name="direct_astar_time_realloc_max_iter" default="1"/>
   <arg name="direct_astar_allow_jump_impulse" default="true"/>
+  <arg name="direct_astar_roll_interpolate_z" default="false"/>
 
   <!-- ROLL / JUMP 混合 A* 决策参数 -->
   <arg name="astar_test_wall" default="true"/>
@@ -137,6 +141,7 @@
     <arg name="direct_astar_min_dt" value="$(arg direct_astar_min_dt)"/>
     <arg name="direct_astar_time_realloc_max_iter" value="$(arg direct_astar_time_realloc_max_iter)"/>
     <arg name="direct_astar_allow_jump_impulse" value="$(arg direct_astar_allow_jump_impulse)"/>
+    <arg name="direct_astar_roll_interpolate_z" value="$(arg direct_astar_roll_interpolate_z)"/>
     <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
     <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
     <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>
@@ -199,6 +204,9 @@
   </node>
 
   <include file="$(find ego_planner)/launch/low_obstacle_simulator.xml">
+    <arg name="init_x" value="$(arg init_x)"/>
+    <arg name="init_y" value="$(arg init_y)"/>
+    <arg name="init_z" value="$(arg init_z)"/>
     <arg name="map_size_x_" value="$(arg map_size_x)"/>
     <arg name="map_size_y_" value="$(arg map_size_y)"/>
     <arg name="map_size_z_" value="$(arg map_size_z)"/>

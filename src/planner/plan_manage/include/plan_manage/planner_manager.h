@@ -85,6 +85,7 @@ class EGOPlannerManager
     double direct_astar_min_dt_{0.04};
     int direct_astar_time_realloc_max_iter_{1};
     bool direct_astar_allow_jump_impulse_{true};
+    bool direct_astar_roll_interpolate_z_{false};
     int astar_pool_size_x_{100};
     int astar_pool_size_y_{100};
     int astar_pool_size_z_{100};

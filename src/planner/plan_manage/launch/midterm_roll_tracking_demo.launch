@@ -10,11 +10,19 @@
     <arg name="enable_local_replan" value="false"/>
     <arg name="enable_periodic_replan" value="false"/>
     <arg name="optimize_direct_astar" value="false"/>
+    <arg name="planning_horizon" value="20.5"/>
+    <arg name="sensing_horizon" value="24.0"/>
+    <arg name="local_update_range_x" value="24.0"/>
+    <arg name="local_update_range_y" value="9.5"/>
+    <arg name="max_ray_length" value="24.0"/>
 
     <!-- 跟踪图只验证 ROLL 绕障控制接口，目标缩短到 detour 场景后方，避免展示时间过长。 -->
-    <arg name="goal_x" value="-10.0"/>
-    <arg name="goal_y" value="0.0"/>
-    <arg name="goal_z" value="0.0"/>
+    <arg name="init_x" value="-18.0"/>
+    <arg name="init_y" value="-1.0"/>
+    <arg name="init_z" value="0.18"/>
+    <arg name="goal_x" value="0.0"/>
+    <arg name="goal_y" value="1.2"/>
+    <arg name="goal_z" value="0.24"/>
 
     <!-- 跟踪展示时使用真实样条时间，不做额外播放加速。 -->
     <arg name="traj_server_physical_time_scale" value="1.0"/>
@@ -25,10 +33,12 @@
     <arg name="direct_astar_acc_dt_weight" value="0.25"/>
     <arg name="direct_astar_vel_dt_weight" value="0.8"/>
     <arg name="direct_astar_roll_anchor_repeat" value="0"/>
+    <arg name="direct_astar_roll_interpolate_z" value="true"/>
 
     <!-- 使用更适合跟踪验证的绕障场景，避开 midterm_global 中逼迫跳跃的窄通道。 -->
     <arg name="astar_test_scene" value="roll_tracking"/>
     <arg name="obstacle_scenario" value="roll_tracking"/>
+    <arg name="astar_height" value="0.18"/>
 
     <!-- 禁用 JUMP 选择，让 A* 通过 ROLL 绕行/滚动生成连续可跟踪轨迹。 -->
     <arg name="max_jump_h" value="0.0"/>

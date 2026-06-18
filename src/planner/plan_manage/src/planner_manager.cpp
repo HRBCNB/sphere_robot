@@ -101,6 +101,7 @@ void EGOPlannerManager::initPlanModules(ros::NodeHandle& nh, PlanningVisualizati
     nh.param("manager/direct_astar_min_dt", direct_astar_min_dt_, 0.04);
     nh.param("manager/direct_astar_time_realloc_max_iter", direct_astar_time_realloc_max_iter_, 1);
     nh.param("manager/direct_astar_allow_jump_impulse", direct_astar_allow_jump_impulse_, true);
+    nh.param("manager/direct_astar_roll_interpolate_z", direct_astar_roll_interpolate_z_, false);
     nh.param("manager/astar_pool_size_x", astar_pool_size_x_, 100);
     nh.param("manager/astar_pool_size_y", astar_pool_size_y_, 100);
     nh.param("manager/astar_pool_size_z", astar_pool_size_z_, 100);
@@ -248,6 +249,22 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 // ROLL-only tracking demo: one central obstacle, so the reference is a clean single detour.
                 add_box(-14.70, -13.30, -0.70, 0.70, 0.0, 1.20);
                 add_box(-12.20, -11.70, 1.35, 1.95, 0.0, 0.45);
+                add_box(-16.30, -15.90, 1.05, 1.65, 0.0, 0.45);
+                add_box(-15.60, -15.15, -1.95, -1.30, 0.0, 0.50);
+                add_box(-11.10, -10.70, -1.65, -1.05, 0.0, 0.45);
+                add_box(-10.45, -10.05, 1.00, 1.55, 0.0, 0.40);
+                add_box(-13.05, -12.65, 0.95, 1.35, 0.0, 0.35);
+                add_box(-12.70, -12.25, -0.35, 0.35, 0.0, 0.10);
+                add_box(-8.80, -8.25, 0.10, 0.95, 0.0, 0.85);
+                add_box(-9.60, -9.15, -1.05, -0.20, 0.0, 0.80);
+                add_box(-7.20, -6.75, -1.85, -1.10, 0.0, 0.50);
+                add_box(-6.55, -6.05, 0.05, 0.90, 0.0, 0.85);
+                add_box(-5.55, -5.05, 1.10, 1.80, 0.0, 0.55);
+                add_box(-4.10, -3.65, -0.90, -0.25, 0.0, 0.75);
+                add_box(-3.35, -2.90, 0.35, 1.05, 0.0, 0.70);
+                add_box(-2.55, -2.10, 1.35, 1.95, 0.0, 0.45);
+                add_box(-1.85, -1.45, -0.45, 0.30, 0.0, 0.65);
+                add_box(-1.25, -0.85, -1.25, -0.70, 0.0, 0.40);
                 // ROS_WARN("[EGOPlannerManager] astar_only inserted roll_tracking test obstacles, voxels=%d", occupied_points);
             }
             else
@@ -590,12 +607,22 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 point_set.reserve(sampled_path.size());
                 point_modes.reserve(sampled_path.size());
 
-                for (const auto& node : sampled_path)
+                for (size_t sample_id = 0; sample_id < sampled_path.size(); ++sample_id)
                 {
+                    const auto& node = sampled_path[sample_id];
                     Eigen::Vector3d pos = node.pos;
                     if (node.mode == ROLL)
                     {
-                        pos.z() = astar_height_;
+                        if (direct_astar_roll_interpolate_z_ && sampled_path.size() > 1)
+                        {
+                            const double ratio = static_cast<double>(sample_id) /
+                                                 static_cast<double>(sampled_path.size() - 1);
+                            pos.z() = start_pt.z() * (1.0 - ratio) + local_target_pt.z() * ratio;
+                        }
+                        else
+                        {
+                            pos.z() = astar_height_;
+                        }
                     }
                     point_set.push_back(pos);
                     point_modes.push_back(node.mode);
@@ -918,7 +945,15 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
             {
                 if (ctrl_point_modes[i] == ROLL)
                 {
-                    ctrl_pts(2, i) = astar_height_;
+                    if (direct_astar_roll_interpolate_z_ && ctrl_pts.cols() > 1)
+                    {
+                        const double ratio = static_cast<double>(i) / static_cast<double>(ctrl_pts.cols() - 1);
+                        ctrl_pts(2, i) = start_pt.z() * (1.0 - ratio) + local_target_pt.z() * ratio;
+                    }
+                    else
+                    {
+                        ctrl_pts(2, i) = astar_height_;
+                    }
                 }
             }
             bspline_optimizer_rebound_->setControlPoints(ctrl_pts);
