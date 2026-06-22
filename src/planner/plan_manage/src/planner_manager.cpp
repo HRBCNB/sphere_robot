@@ -818,6 +818,9 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 // 注意：这里的 ts 是 B-spline 参数时间间隔；在原始 EGO-Planner 中，traj_server 会直接把它当作物理执行时间使用。
                 double max_sample_gap = 0.0;
                 size_t max_gap_id = 0;
+                constexpr int kDebugTopGapNum = 5;
+                double top_gaps[kDebugTopGapNum] = {0.0, 0.0, 0.0, 0.0, 0.0};
+                size_t top_gap_ids[kDebugTopGapNum] = {0, 0, 0, 0, 0};
                 for (size_t i = 1; i < point_set.size(); ++i)
                 {
                     const double gap = (point_set[i] - point_set[i - 1]).norm();
@@ -825,6 +828,20 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     {
                         max_sample_gap = gap;
                         max_gap_id = i;
+                    }
+                    for (int rank = 0; rank < kDebugTopGapNum; ++rank)
+                    {
+                        if (gap > top_gaps[rank])
+                        {
+                            for (int j = kDebugTopGapNum - 1; j > rank; --j)
+                            {
+                                top_gaps[j] = top_gaps[j - 1];
+                                top_gap_ids[j] = top_gap_ids[j - 1];
+                            }
+                            top_gaps[rank] = gap;
+                            top_gap_ids[rank] = i;
+                            break;
+                        }
                     }
                 }
 
@@ -871,6 +888,30 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                          max_gap_id, point_set.size(), max_gap_mode == JUMP ? "JUMP" : "ROLL", max_sample_gap,
                          max_gap_start.x(), max_gap_start.y(), max_gap_start.z(),
                          max_gap_end.x(), max_gap_end.y(), max_gap_end.z(), pp_.max_vel_, pp_.max_acc_);
+                for (int rank = 0; rank < kDebugTopGapNum; ++rank)
+                {
+                    if (top_gaps[rank] <= 1e-6) continue;
+                    const size_t gap_id = top_gap_ids[rank];
+                    const double gap_vel_dt = pp_.max_vel_ > 1e-3 ? vel_dt_weight * top_gaps[rank] / pp_.max_vel_ : ts;
+                    const double gap_acc_dt = pp_.max_acc_ > 1e-3 ? acc_dt_weight * std::sqrt(2.0 * top_gaps[rank] / pp_.max_acc_) : ts;
+                    const char* gap_selected = "base_ts";
+                    if (gap_vel_dt >= ts && gap_vel_dt >= gap_acc_dt)
+                        gap_selected = "vel_dt";
+                    else if (gap_acc_dt >= ts && gap_acc_dt >= gap_vel_dt)
+                        gap_selected = "acc_dt";
+                    const TRAJ_MODE gap_mode =
+                        (gap_id > 0 && gap_id < point_modes.size() &&
+                         (point_modes[gap_id - 1] == JUMP || point_modes[gap_id] == JUMP))
+                            ? JUMP
+                            : ROLL;
+                    const Eigen::Vector3d gap_start = gap_id > 0 ? point_set[gap_id - 1] : Eigen::Vector3d::Zero();
+                    const Eigen::Vector3d gap_end = gap_id < point_set.size() ? point_set[gap_id] : Eigen::Vector3d::Zero();
+                    ROS_WARN("[EGOPlannerManager] direct A* gap rank %d: id=%zu/%zu, mode=%s, gap=%.3fm, base_ts=%.3fs, vel_dt=%.3fs, acc_dt=%.3fs, selected=%s, p0=(%.2f %.2f %.2f), p1=(%.2f %.2f %.2f)",
+                             rank + 1, gap_id, point_set.size(), gap_mode == JUMP ? "JUMP" : "ROLL", top_gaps[rank],
+                             ts, gap_vel_dt, gap_acc_dt, gap_selected,
+                             gap_start.x(), gap_start.y(), gap_start.z(),
+                             gap_end.x(), gap_end.y(), gap_end.z());
+                }
                 if (direct_astar_ts > ts)
                 {
                     // ROS_INFO("[EGOPlannerManager] direct A* init: enlarge ts %.3f -> %.3f for dynamic feasibility, max_gap=%.3f",

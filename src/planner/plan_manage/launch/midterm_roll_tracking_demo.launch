@@ -27,9 +27,9 @@
     <!-- 跟踪展示时使用真实样条时间，不做额外播放加速。 -->
     <arg name="traj_server_physical_time_scale" value="1.0"/>
 
-    <!-- ROLL-only 跟踪展示采用折中动力学参数：优先保证控制器能跟上。 -->
-    <arg name="max_vel" value="3.6"/>
-    <arg name="max_acc" value="12.0"/>
+    <!-- ROLL-only 跟踪展示采用较保守的地面滚动参数，避免出现不现实的大加速度。 -->
+    <arg name="max_vel" value="2.0"/>
+    <arg name="max_acc" value="4.0"/>
     <arg name="direct_astar_acc_dt_weight" value="0.25"/>
     <arg name="direct_astar_vel_dt_weight" value="0.8"/>
     <arg name="direct_astar_roll_anchor_repeat" value="0"/>
@@ -45,7 +45,7 @@
     <arg name="max_jump_d" value="0.0"/>
     <arg name="jump_penalty" value="999.0"/>
     <arg name="direct_astar_allow_jump_impulse" value="false"/>
-    <arg name="direct_astar_time_realloc_max_iter" value="1"/>
+    <arg name="direct_astar_time_realloc_max_iter" value="2"/>
 
     <!-- ROLL-only 下允许更充分绕行，避免为了贴近直线而擦障。 -->
     <arg name="max_line_deviation" value="2.5"/>

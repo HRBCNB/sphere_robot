@@ -28,6 +28,7 @@ def read_bag(bag_path, pos_cmd_topic, odom_topic):
                     stamp,
                     msg.position.x, msg.position.y,
                     msg.velocity.x, msg.velocity.y,
+                    msg.acceleration.x, msg.acceleration.y,
                 ])
             elif topic == odom_topic:
                 odom_rows.append([
@@ -62,7 +63,7 @@ def align_to_ref(ref, odom):
     odom_interp = np.zeros((ref.shape[0], 4), dtype=float)
     for col in range(1, 5):
         odom_interp[:, col - 1] = np.interp(t, odom[:, 0], odom[:, col])
-    return t - t[0], ref[:, 1:5], odom_interp
+    return t - t[0], ref[:, 1:7], odom_interp
 
 
 def crop_time(time, ref_state, odom_state, start_time, end_time):
@@ -80,30 +81,30 @@ def plot_position_xy(path, time, ref_state, odom_state):
     labels = [('x', 0), ('y', 1)]
     fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
     for ax, (name, idx) in zip(axes, labels):
-        ax.plot(time, ref_state[:, idx], color='#1f77b4', linewidth=2.0, label='{}_ref'.format(name))
-        ax.plot(time, odom_state[:, idx], color='#d62728', linewidth=1.8, linestyle='--', label='{}_odom'.format(name))
-        ax.set_ylabel('{} / m'.format(name))
+        ax.plot(time, ref_state[:, idx], color='#1f77b4', linewidth=2.0, label='Reference position')
+        ax.plot(time, odom_state[:, idx], color='#d62728', linewidth=1.8, linestyle='--', label='Actual position')
+        ax.set_ylabel('{} position / m'.format(name))
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best')
-    axes[-1].set_xlabel('time / s')
-    fig.suptitle('ROLL Tracking Position')
+    axes[-1].set_xlabel('Time / s')
+    fig.suptitle('Planar Position Tracking')
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
 def plot_velocity_xy(path, time, ref_state, odom_state):
-    labels = [('vx', 2), ('vy', 3)]
+    labels = [('x', 2), ('y', 3)]
     colors = ['#1f77b4', '#2ca02c']
     fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
     for ax, (name, idx), color in zip(axes, labels, colors):
-        ax.plot(time, ref_state[:, idx], color=color, linewidth=2.0, label='{}_ref'.format(name))
-        ax.plot(time, odom_state[:, idx], color='#d62728', linewidth=1.6, linestyle='--', label='{}_odom'.format(name))
-        ax.set_ylabel('{} / m/s'.format(name))
+        ax.plot(time, ref_state[:, idx], color=color, linewidth=2.0, label='Reference velocity')
+        ax.plot(time, odom_state[:, idx], color='#d62728', linewidth=1.6, linestyle='--', label='Actual velocity')
+        ax.set_ylabel('{} velocity / (m/s)'.format(name))
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best')
-    axes[-1].set_xlabel('time / s')
-    fig.suptitle('ROLL Tracking Velocity Components')
+    axes[-1].set_xlabel('Time / s')
+    fig.suptitle('Planar Velocity Component Tracking')
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(path, dpi=180)
     plt.close(fig)
@@ -113,11 +114,11 @@ def plot_speed_xy(path, time, ref_state, odom_state):
     ref_v = speed_xy(ref_state)
     odom_v = speed_xy(odom_state)
     fig, ax = plt.subplots(figsize=(10, 4.6))
-    ax.plot(time, ref_v, color='#1f77b4', linewidth=2.0, label='|v_xy_ref|')
-    ax.plot(time, odom_v, color='#d62728', linewidth=1.8, linestyle='--', label='|v_xy_odom|')
-    ax.set_xlabel('time / s')
-    ax.set_ylabel('speed / m/s')
-    ax.set_title('ROLL Tracking XY Speed')
+    ax.plot(time, ref_v, color='#1f77b4', linewidth=2.0, label='Reference speed')
+    ax.plot(time, odom_v, color='#d62728', linewidth=1.8, linestyle='--', label='Actual speed')
+    ax.set_xlabel('Time / s')
+    ax.set_ylabel('Speed / (m/s)')
+    ax.set_title('Planar Speed Tracking')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='best')
     fig.tight_layout()
@@ -127,11 +128,11 @@ def plot_speed_xy(path, time, ref_state, odom_state):
 
 def plot_path_xy(path, ref_state, odom_state):
     fig, ax = plt.subplots(figsize=(7.0, 6.0))
-    ax.plot(ref_state[:, 0], ref_state[:, 1], color='#1f77b4', linewidth=2.2, label='ref path')
-    ax.plot(odom_state[:, 0], odom_state[:, 1], color='#d62728', linewidth=1.8, linestyle='--', label='odom path')
-    ax.set_xlabel('x / m')
-    ax.set_ylabel('y / m')
-    ax.set_title('ROLL Tracking XY Path')
+    ax.plot(ref_state[:, 0], ref_state[:, 1], color='#1f77b4', linewidth=2.2, label='Reference trajectory')
+    ax.plot(odom_state[:, 0], odom_state[:, 1], color='#d62728', linewidth=1.8, linestyle='--', label='Actual trajectory')
+    ax.set_xlabel('x position / m')
+    ax.set_ylabel('y position / m')
+    ax.set_title('Planar Trajectory Tracking')
     ax.axis('equal')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='best')
@@ -140,18 +141,57 @@ def plot_path_xy(path, ref_state, odom_state):
     plt.close(fig)
 
 
+def plot_reference_acceleration_xy(path, time, ref_state):
+    ax_ref = ref_state[:, 4]
+    ay_ref = ref_state[:, 5]
+    acc_ref = np.linalg.norm(ref_state[:, 4:6], axis=1)
+    max_idx = int(np.argmax(acc_ref))
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
+    axes[0].plot(time, ax_ref, color='#1f77b4', linewidth=1.8, label='Reference $a_x$')
+    axes[0].plot(time, ay_ref, color='#2ca02c', linewidth=1.8, label='Reference $a_y$')
+    axes[0].set_ylabel('Acceleration / (m/s$^2$)')
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend(loc='best')
+
+    axes[1].plot(time, acc_ref, color='#d62728', linewidth=2.0, label='Reference acceleration magnitude')
+    axes[1].scatter(time[max_idx], acc_ref[max_idx], color='#111111', s=28, zorder=3)
+    axes[1].annotate(
+        'Max = {:.3f} m/s$^2$'.format(acc_ref[max_idx]),
+        xy=(time[max_idx], acc_ref[max_idx]),
+        xytext=(8, 10),
+        textcoords='offset points',
+    )
+    axes[1].set_xlabel('Time / s')
+    axes[1].set_ylabel('Acceleration magnitude / (m/s$^2$)')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(loc='best')
+
+    fig.suptitle('Reference Trajectory Acceleration')
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
 def save_csv(path, time, ref_state, odom_state):
     ref_v = speed_xy(ref_state)
+    ref_a = np.linalg.norm(ref_state[:, 4:6], axis=1)
     odom_v = speed_xy(odom_state)
     with open(path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
             't',
             'x_ref', 'y_ref', 'vx_ref', 'vy_ref', 'v_xy_ref',
+            'ax_ref', 'ay_ref', 'a_xy_ref',
             'x_odom', 'y_odom', 'vx_odom', 'vy_odom', 'v_xy_odom',
         ])
         for i in range(len(time)):
-            writer.writerow([time[i], *ref_state[i], ref_v[i], *odom_state[i], odom_v[i]])
+            writer.writerow([
+                time[i],
+                *ref_state[i, 0:4], ref_v[i],
+                *ref_state[i, 4:6], ref_a[i],
+                *odom_state[i], odom_v[i],
+            ])
 
 
 def print_ranges(ref_state, odom_state):
@@ -185,24 +225,29 @@ def main():
     vel_png = out_dir / 'roll_tracking_velocity_xy.png'
     speed_png = out_dir / 'roll_tracking_speed_xy.png'
     path_png = out_dir / 'roll_tracking_path_xy.png'
+    ref_acc_png = out_dir / 'roll_tracking_reference_acceleration_xy.png'
     csv_path = out_dir / 'roll_tracking_aligned_xy.csv'
 
     plot_position_xy(pos_png, time, ref_state, odom_state)
     plot_velocity_xy(vel_png, time, ref_state, odom_state)
     plot_speed_xy(speed_png, time, ref_state, odom_state)
     plot_path_xy(path_png, ref_state, odom_state)
+    plot_reference_acceleration_xy(ref_acc_png, time, ref_state)
     save_csv(csv_path, time, ref_state, odom_state)
 
     pos_err = np.linalg.norm(ref_state[:, 0:2] - odom_state[:, 0:2], axis=1)
     vel_err = np.linalg.norm(ref_state[:, 2:4] - odom_state[:, 2:4], axis=1)
+    ref_acc = np.linalg.norm(ref_state[:, 4:6], axis=1)
 
     print('Saved:')
-    for p in [pos_png, vel_png, speed_png, path_png, csv_path]:
+    for p in [pos_png, vel_png, speed_png, path_png, ref_acc_png, csv_path]:
         print('  {}'.format(p))
     print_ranges(ref_state, odom_state)
     print('XY position error: mean={:.3f} m, max={:.3f} m'.format(np.mean(pos_err), np.max(pos_err)))
     print('XY velocity error: mean={:.3f} m/s, max={:.3f} m/s, rms={:.3f} m/s'.format(
         np.mean(vel_err), np.max(vel_err), math.sqrt(np.mean(vel_err ** 2))))
+    print('XY reference acceleration: mean={:.3f} m/s^2, max={:.3f} m/s^2'.format(
+        np.mean(ref_acc), np.max(ref_acc)))
 
 
 if __name__ == '__main__':
