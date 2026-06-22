@@ -73,7 +73,7 @@ def crop_time(time, ref_state, odom_state, start_time, end_time):
     return time[mask], ref_state[mask], odom_state[mask]
 
 
-def speed_xy(state):
+def velocity_magnitude_xy(state):
     return np.linalg.norm(state[:, 2:4], axis=1)
 
 
@@ -87,13 +87,13 @@ def plot_position_xy(path, time, ref_state, odom_state):
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best')
     axes[-1].set_xlabel('Time / s')
-    fig.suptitle('Planar Position Tracking')
+    fig.suptitle('XY Position Tracking')
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
-def plot_velocity_xy(path, time, ref_state, odom_state):
+def plot_velocity_components_xy(path, time, ref_state, odom_state):
     labels = [('x', 2), ('y', 3)]
     colors = ['#1f77b4', '#2ca02c']
     fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
@@ -104,21 +104,21 @@ def plot_velocity_xy(path, time, ref_state, odom_state):
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best')
     axes[-1].set_xlabel('Time / s')
-    fig.suptitle('Planar Velocity Component Tracking')
+    fig.suptitle('XY Velocity Component Tracking')
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
-def plot_speed_xy(path, time, ref_state, odom_state):
-    ref_v = speed_xy(ref_state)
-    odom_v = speed_xy(odom_state)
+def plot_velocity_magnitude_xy(path, time, ref_state, odom_state):
+    ref_v = velocity_magnitude_xy(ref_state)
+    odom_v = velocity_magnitude_xy(odom_state)
     fig, ax = plt.subplots(figsize=(10, 4.6))
-    ax.plot(time, ref_v, color='#1f77b4', linewidth=2.0, label='Reference speed')
-    ax.plot(time, odom_v, color='#d62728', linewidth=1.8, linestyle='--', label='Actual speed')
+    ax.plot(time, ref_v, color='#1f77b4', linewidth=2.0, label='Reference velocity magnitude')
+    ax.plot(time, odom_v, color='#d62728', linewidth=1.8, linestyle='--', label='Actual velocity magnitude')
     ax.set_xlabel('Time / s')
-    ax.set_ylabel('Speed / (m/s)')
-    ax.set_title('Planar Speed Tracking')
+    ax.set_ylabel('Velocity magnitude / (m/s)')
+    ax.set_title('XY Velocity Magnitude Tracking')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='best')
     fig.tight_layout()
@@ -132,11 +132,43 @@ def plot_path_xy(path, ref_state, odom_state):
     ax.plot(odom_state[:, 0], odom_state[:, 1], color='#d62728', linewidth=1.8, linestyle='--', label='Actual trajectory')
     ax.set_xlabel('x position / m')
     ax.set_ylabel('y position / m')
-    ax.set_title('Planar Trajectory Tracking')
+    ax.set_title('XY Trajectory Tracking')
     ax.axis('equal')
     ax.grid(True, alpha=0.3)
     ax.legend(loc='best')
     fig.tight_layout()
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def plot_position_error_xy(path, time, ref_state, odom_state):
+    ex = ref_state[:, 0] - odom_state[:, 0]
+    ey = ref_state[:, 1] - odom_state[:, 1]
+    err = np.linalg.norm(ref_state[:, 0:2] - odom_state[:, 0:2], axis=1)
+    max_idx = int(np.argmax(err))
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 5.6), sharex=True)
+    axes[0].plot(time, ex, color='#1f77b4', linewidth=1.8, label='$e_x$')
+    axes[0].plot(time, ey, color='#2ca02c', linewidth=1.8, label='$e_y$')
+    axes[0].set_ylabel('Position error / m')
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend(loc='best')
+
+    axes[1].plot(time, err, color='#d62728', linewidth=2.0, label='XY position error')
+    axes[1].scatter(time[max_idx], err[max_idx], color='#111111', s=28, zorder=3)
+    axes[1].annotate(
+        'Max = {:.3f} m'.format(err[max_idx]),
+        xy=(time[max_idx], err[max_idx]),
+        xytext=(8, 10),
+        textcoords='offset points',
+    )
+    axes[1].set_xlabel('Time / s')
+    axes[1].set_ylabel('Error norm / m')
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend(loc='best')
+
+    fig.suptitle('XY Position Tracking Error')
+    fig.tight_layout(rect=[0, 0, 1, 0.95])
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
@@ -174,9 +206,9 @@ def plot_reference_acceleration_xy(path, time, ref_state):
 
 
 def save_csv(path, time, ref_state, odom_state):
-    ref_v = speed_xy(ref_state)
+    ref_v = velocity_magnitude_xy(ref_state)
     ref_a = np.linalg.norm(ref_state[:, 4:6], axis=1)
-    odom_v = speed_xy(odom_state)
+    odom_v = velocity_magnitude_xy(odom_state)
     with open(path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
@@ -221,17 +253,19 @@ def main():
     if len(time) < 2:
         raise RuntimeError('Too little data after cropping')
 
-    pos_png = out_dir / 'roll_tracking_position_xy.png'
-    vel_png = out_dir / 'roll_tracking_velocity_xy.png'
-    speed_png = out_dir / 'roll_tracking_speed_xy.png'
-    path_png = out_dir / 'roll_tracking_path_xy.png'
-    ref_acc_png = out_dir / 'roll_tracking_reference_acceleration_xy.png'
+    pos_png = out_dir / '位置跟踪曲线.png'
+    vel_components_png = out_dir / '速度分量跟踪曲线.png'
+    vel_magnitude_png = out_dir / '速度大小跟踪曲线.png'
+    path_png = out_dir / '平面轨迹对比.png'
+    pos_err_png = out_dir / '位置跟踪误差曲线.png'
+    ref_acc_png = out_dir / '参考加速度曲线.png'
     csv_path = out_dir / 'roll_tracking_aligned_xy.csv'
 
     plot_position_xy(pos_png, time, ref_state, odom_state)
-    plot_velocity_xy(vel_png, time, ref_state, odom_state)
-    plot_speed_xy(speed_png, time, ref_state, odom_state)
+    plot_velocity_components_xy(vel_components_png, time, ref_state, odom_state)
+    plot_velocity_magnitude_xy(vel_magnitude_png, time, ref_state, odom_state)
     plot_path_xy(path_png, ref_state, odom_state)
+    plot_position_error_xy(pos_err_png, time, ref_state, odom_state)
     plot_reference_acceleration_xy(ref_acc_png, time, ref_state)
     save_csv(csv_path, time, ref_state, odom_state)
 
@@ -240,7 +274,7 @@ def main():
     ref_acc = np.linalg.norm(ref_state[:, 4:6], axis=1)
 
     print('Saved:')
-    for p in [pos_png, vel_png, speed_png, path_png, ref_acc_png, csv_path]:
+    for p in [pos_png, vel_components_png, vel_magnitude_png, path_png, pos_err_png, ref_acc_png, csv_path]:
         print('  {}'.format(p))
     print_ranges(ref_state, odom_state)
     print('XY position error: mean={:.3f} m, max={:.3f} m'.format(np.mean(pos_err), np.max(pos_err)))

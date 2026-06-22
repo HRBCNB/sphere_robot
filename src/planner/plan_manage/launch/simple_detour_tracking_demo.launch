@@ -1,0 +1,53 @@
+<launch>
+  <!-- 简单绕障跟踪场景：正前方放一个高障碍，禁用 JUMP，只验证 XY 平面绕行跟踪。 -->
+  <include file="$(find ego_planner)/launch/midterm_global_demo.launch">
+    <arg name="use_rviz" value="true"/>
+    <arg name="use_control" value="true"/>
+    <arg name="auto_goal" value="true"/>
+    <arg name="astar_only" value="false"/>
+    <arg name="show_local_traj" value="true"/>
+    <arg name="show_whole_traj" value="true"/>
+    <arg name="enable_local_replan" value="false"/>
+    <arg name="enable_periodic_replan" value="false"/>
+    <arg name="optimize_direct_astar" value="false"/>
+
+    <arg name="map_size_x" value="18.0"/>
+    <arg name="map_size_y" value="10.0"/>
+    <arg name="map_size_z" value="3.0"/>
+    <arg name="planning_horizon" value="12.5"/>
+    <arg name="sensing_horizon" value="14.0"/>
+    <arg name="local_update_range_x" value="14.0"/>
+    <arg name="local_update_range_y" value="6.0"/>
+    <arg name="max_ray_length" value="14.0"/>
+
+    <arg name="init_x" value="-8.0"/>
+    <arg name="init_y" value="0.0"/>
+    <arg name="init_z" value="0.18"/>
+    <arg name="goal_x" value="3.5"/>
+    <arg name="goal_y" value="0.0"/>
+    <arg name="goal_z" value="0.18"/>
+
+    <arg name="traj_server_physical_time_scale" value="1.0"/>
+
+    <arg name="max_vel" value="1.6"/>
+    <arg name="max_acc" value="3.0"/>
+    <arg name="direct_astar_acc_dt_weight" value="0.35"/>
+    <arg name="direct_astar_vel_dt_weight" value="1.0"/>
+    <arg name="direct_astar_roll_anchor_repeat" value="0"/>
+    <arg name="direct_astar_roll_interpolate_z" value="true"/>
+    <arg name="direct_astar_time_realloc_max_iter" value="2"/>
+
+    <arg name="astar_test_scene" value="simple_detour_tracking"/>
+    <arg name="obstacle_scenario" value="simple_detour_tracking"/>
+    <arg name="astar_height" value="0.18"/>
+
+    <arg name="max_jump_h" value="0.0"/>
+    <arg name="max_jump_d" value="0.0"/>
+    <arg name="jump_penalty" value="999.0"/>
+    <arg name="direct_astar_allow_jump_impulse" value="false"/>
+
+    <arg name="max_line_deviation" value="2.2"/>
+    <arg name="jumpable_detour_penalty" value="0.0"/>
+    <arg name="line_deviation_weight" value="1.0"/>
+  </include>
+</launch>

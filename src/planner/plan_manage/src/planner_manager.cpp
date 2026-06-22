@@ -244,6 +244,12 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                 add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
                 // ROS_WARN("[EGOPlannerManager] astar_only inserted detour test obstacles, voxels=%d", occupied_points);
             }
+            else if (astar_test_scene_ == "simple_detour_tracking")
+            {
+                // Simple tracking benchmark: one front obstacle, forcing a clean XY detour.
+                add_box(-4.40, -3.20, -0.75, 0.75, 0.0, 1.15);
+                // ROS_WARN("[EGOPlannerManager] astar_only inserted simple detour tracking obstacle, voxels=%d", occupied_points);
+            }
             else if (astar_test_scene_ == "roll_tracking")
             {
                 // ROLL-only tracking demo: one central obstacle, so the reference is a clean single detour.

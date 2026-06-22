@@ -93,6 +93,10 @@ int main(int argc, char** argv)
         add_box(-14.7, -13.3, -0.65, 0.65, 0.0, 1.25);
         add_box(-11.8, -11.4, -0.45, 0.45, 0.0, 0.30);
     }
+    else if (scenario == "simple_detour_tracking")
+    {
+        add_box(-4.40, -3.20, -0.75, 0.75, 0.0, 1.15);
+    }
     else if (scenario == "roll_tracking")
     {
         add_box(-14.70, -13.30, -0.70, 0.70, 0.0, 1.20);
