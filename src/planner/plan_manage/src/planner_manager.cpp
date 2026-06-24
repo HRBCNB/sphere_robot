@@ -634,6 +634,20 @@ bool EGOPlannerManager::reboundReplan(Eigen::Vector3d start_pt, Eigen::Vector3d 
                     point_modes.push_back(node.mode);
                 }
 
+                Eigen::Vector3d anchored_start = start_pt;
+                Eigen::Vector3d anchored_goal = local_target_pt;
+                if (!direct_astar_roll_interpolate_z_)
+                {
+                    anchored_start.z() = astar_height_;
+                    anchored_goal.z() = astar_height_;
+                }
+                const TRAJ_MODE start_mode = point_modes.empty() ? ROLL : point_modes.front();
+                const TRAJ_MODE goal_mode = point_modes.empty() ? ROLL : point_modes.back();
+                point_set.insert(point_set.begin(), anchored_start);
+                point_modes.insert(point_modes.begin(), start_mode);
+                point_set.push_back(anchored_goal);
+                point_modes.push_back(goal_mode);
+
                 auto isHighInflatedObstacle = [&](const Eigen::Vector3d& pos) {
                     if (!grid_map_->getInflateOccupancy(pos))
                     {
